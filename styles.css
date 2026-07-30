@@ -94,21 +94,12 @@ button {
   margin-bottom: 4px;
 }
 
-.editor-header,
 .panel,
-.detail-panel {
+.form-panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
-}
-
-.editor-header {
-  display: grid;
-  grid-template-columns: 1fr minmax(220px, 320px);
-  gap: 24px;
-  align-items: end;
-  padding: 20px;
 }
 
 .panel {
@@ -256,28 +247,49 @@ input[type="number"] {
   border-left: 2px solid var(--line);
 }
 
-.tree-button {
-  width: 100%;
+.tree-row {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
   padding: 12px;
-  text-align: left;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   color: var(--text);
 }
 
-.tree-button.active {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+.tree-toggle {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
-.tree-title {
+.tree-title,
+.row-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.tree-title {
   font-weight: 800;
+}
+
+.row-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.row-actions .secondary-button,
+.row-actions .danger-button {
+  min-height: 34px;
+  padding: 7px 10px;
 }
 
 .tree-title strong {
@@ -302,16 +314,17 @@ input[type="number"] {
   font-size: 13px;
 }
 
-.depth-1 {
+.tree-row:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.tree-row.depth-1 {
   background: #f8fafc;
 }
 
-.depth-2 {
+.tree-row.depth-2 {
   background: #fff;
-}
-
-.depth-3 {
-  background: #f8fafc;
 }
 
 .item-description {
@@ -325,8 +338,17 @@ input[type="number"] {
   white-space: pre-wrap;
 }
 
-.detail-panel {
+.form-view {
+  min-height: calc(100vh - 56px);
+}
+
+.form-panel {
   padding: 20px;
+}
+
+.form-panel h2 {
+  margin: 4px 0 0;
+  font-size: 28px;
 }
 
 .detail-grid {
@@ -414,6 +436,20 @@ input[type="number"] {
   object-fit: cover;
 }
 
+.remove-attachment {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(207, 61, 61, 0.92);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .voice-list {
   display: grid;
   gap: 10px;
@@ -422,7 +458,7 @@ input[type="number"] {
 
 .voice-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 10px;
@@ -444,10 +480,17 @@ input[type="number"] {
     min-height: auto;
   }
 
-  .editor-header,
   .detail-grid,
   .attachment-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tree-row {
+    grid-template-columns: 1fr;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
   }
 
   .panel-header {

@@ -28,51 +28,45 @@
 
       <main class="workspace">
         <section id="emptyState" class="empty-state">
-          <h2>No project selected</h2>
-          <p>Create a project or choose one from the left.</p>
+          <h2>No projects yet</h2>
+          <p>Create a project to start planning tasks and to-do items.</p>
         </section>
 
-        <section id="editor" class="editor hidden">
-          <header class="editor-header">
-            <div>
-              <label class="field-label" for="projectTitle">Project</label>
-              <input id="projectTitle" class="title-input" type="text" />
-            </div>
-            <div class="progress-block">
-              <span id="projectProgressText">0%</span>
-              <div class="progress-bar"><div id="projectProgressBar"></div></div>
-            </div>
-          </header>
-
+        <section id="listView" class="editor hidden">
           <section class="panel">
             <div class="panel-header">
               <h2>Projects</h2>
-              <div class="button-row">
-                <button id="addSubprojectButton" class="secondary-button" type="button">+ Subproject</button>
-                <button id="addTaskButton" class="secondary-button" type="button">+ Task</button>
-                <button id="addItemButton" class="secondary-button" type="button">+ Item</button>
-              </div>
             </div>
             <div id="projectList" class="tree-list"></div>
           </section>
+        </section>
 
-          <section class="detail-panel">
+        <section id="formView" class="form-view hidden">
+          <form id="objectForm" class="form-panel">
             <div class="detail-header">
               <div>
-                <span id="detailKind" class="eyebrow">Details</span>
-                <input id="detailTitle" class="detail-title" type="text" />
+                <span id="formKind" class="eyebrow">Project</span>
+                <h2 id="formHeading">New Project</h2>
               </div>
-              <button id="deleteSelectedButton" class="danger-button" type="button">Delete</button>
+              <div class="button-row">
+                <button id="cancelFormButton" class="secondary-button" type="button">Cancel</button>
+                <button class="primary-button" type="submit">OK</button>
+              </div>
             </div>
 
             <div class="detail-grid">
               <label class="field-group">
+                <span class="field-label">Name</span>
+                <input id="formTitle" type="text" required />
+              </label>
+
+              <label id="weightGroup" class="field-group">
                 <span class="field-label">Share</span>
-                <input id="detailWeight" type="number" min="0" max="100" />
+                <input id="formWeight" type="number" min="0" max="100" />
               </label>
 
               <label id="doneGroup" class="check-group hidden">
-                <input id="itemDone" type="checkbox" />
+                <input id="formDone" type="checkbox" />
                 <span>Done</span>
               </label>
 
@@ -87,7 +81,7 @@
 
             <label class="field-group wide">
               <span class="field-label">Description</span>
-              <textarea id="detailDescription" rows="5"></textarea>
+              <textarea id="formDescription" rows="5"></textarea>
             </label>
 
             <div class="attachment-grid">
@@ -110,7 +104,7 @@
                 <div id="voiceList" class="voice-list"></div>
               </section>
             </div>
-          </section>
+          </form>
         </section>
       </main>
     </div>

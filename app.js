@@ -1,42 +1,41 @@
-const STORAGE_KEY = "project-time-manager-web-v1";
+const STORAGE_KEY = "project-time-manager-web-v2";
+const OLD_STORAGE_KEY = "project-time-manager-web-v1";
 const SERVICE_WORKER_PATH = "service-worker.js";
 
 const state = {
   projects: [],
-  selectedProjectId: null,
-  selectedSubprojectId: null,
-  selectedTaskId: null,
-  selectedItemId: null,
+  openProjectIds: new Set(),
+  openTaskIds: new Set(),
+  openItemIds: new Set(),
+  form: null,
   recorder: null,
   recordingChunks: [],
 };
 
 const els = {
   addProjectButton: document.querySelector("#addProjectButton"),
-  projectList: document.querySelector("#projectList"),
   emptyState: document.querySelector("#emptyState"),
-  editor: document.querySelector("#editor"),
-  projectTitle: document.querySelector("#projectTitle"),
-  projectProgressText: document.querySelector("#projectProgressText"),
-  projectProgressBar: document.querySelector("#projectProgressBar"),
-  addSubprojectButton: document.querySelector("#addSubprojectButton"),
-  addTaskButton: document.querySelector("#addTaskButton"),
-  addItemButton: document.querySelector("#addItemButton"),
-  detailKind: document.querySelector("#detailKind"),
-  detailTitle: document.querySelector("#detailTitle"),
-  deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
-  detailWeight: document.querySelector("#detailWeight"),
+  listView: document.querySelector("#listView"),
+  projectList: document.querySelector("#projectList"),
+  formView: document.querySelector("#formView"),
+  objectForm: document.querySelector("#objectForm"),
+  formKind: document.querySelector("#formKind"),
+  formHeading: document.querySelector("#formHeading"),
+  formTitle: document.querySelector("#formTitle"),
+  weightGroup: document.querySelector("#weightGroup"),
+  formWeight: document.querySelector("#formWeight"),
   doneGroup: document.querySelector("#doneGroup"),
-  itemDone: document.querySelector("#itemDone"),
+  formDone: document.querySelector("#formDone"),
   timerGroup: document.querySelector("#timerGroup"),
   timerText: document.querySelector("#timerText"),
   startStopTimerButton: document.querySelector("#startStopTimerButton"),
   resetTimerButton: document.querySelector("#resetTimerButton"),
-  detailDescription: document.querySelector("#detailDescription"),
+  formDescription: document.querySelector("#formDescription"),
   photoInput: document.querySelector("#photoInput"),
   photoList: document.querySelector("#photoList"),
   recordButton: document.querySelector("#recordButton"),
   voiceList: document.querySelector("#voiceList"),
+  cancelFormButton: document.querySelector("#cancelFormButton"),
 };
 
 function id() {
@@ -47,23 +46,21 @@ function blankNotes() {
   return { description: "", photos: [], voiceRecordings: [] };
 }
 
-function newProject(number) {
-  return { id: id(), title: number ? `New Project ${number}` : "New Project", notes: blankNotes(), subprojects: [] };
+function newProject() {
+  return { id: id(), title: `Project ${state.projects.length + 1}`, notes: blankNotes(), tasks: [] };
 }
 
-function newSubproject(number) {
-  return { id: id(), title: `Subproject ${number}`, weight: 0, notes: blankNotes(), tasks: [] };
+function newTask(project) {
+  const weights = normalizedWeights(project.tasks.length + 1);
+  return { id: id(), title: `Task ${project.tasks.length + 1}`, weight: weights[weights.length - 1], notes: blankNotes(), items: [] };
 }
 
-function newTask(number) {
-  return { id: id(), title: `Task ${number}`, weight: 0, notes: blankNotes(), items: [] };
-}
-
-function newItem(number) {
+function newItem(task) {
+  const weights = normalizedWeights(task.items.length + 1);
   return {
     id: id(),
-    title: `Item ${number}`,
-    weight: 0,
+    title: `Item ${task.items.length + 1}`,
+    weight: weights[weights.length - 1],
     isDone: false,
     notes: blankNotes(),
     elapsedSeconds: 0,
@@ -71,44 +68,64 @@ function newItem(number) {
   };
 }
 
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function load() {
+  const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY);
   try {
-    state.projects = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    state.projects = migrateProjects(JSON.parse(saved) || []);
   } catch {
     state.projects = [];
   }
+  save();
+}
+
+function migrateProjects(projects) {
+  return projects.map((project) => {
+    if (Array.isArray(project.tasks)) {
+      project.notes = project.notes || blankNotes();
+      project.tasks.forEach((task) => {
+        task.notes = task.notes || blankNotes();
+        task.items = task.items || [];
+        task.items.forEach((item) => {
+          item.notes = item.notes || blankNotes();
+          item.elapsedSeconds = item.elapsedSeconds || 0;
+          item.timerStartedAt = item.timerStartedAt || null;
+        });
+        normalize(task.items);
+      });
+      normalize(project.tasks);
+      return project;
+    }
+
+    const tasks = [];
+    (project.subprojects || []).forEach((subproject) => {
+      (subproject.tasks || []).forEach((task) => {
+        tasks.push({
+          ...task,
+          id: task.id || id(),
+          title: task.title || "Task",
+          notes: task.notes || blankNotes(),
+          items: task.items || [],
+        });
+      });
+    });
+    const migrated = {
+      id: project.id || id(),
+      title: project.title || "Project",
+      notes: project.notes || blankNotes(),
+      tasks,
+    };
+    migrated.tasks.forEach((task) => normalize(task.items));
+    normalize(migrated.tasks);
+    return migrated;
+  });
 }
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.projects));
-}
-
-function findProject() {
-  return state.projects.find((project) => project.id === state.selectedProjectId) || null;
-}
-
-function findSubproject() {
-  return findProject()?.subprojects.find((subproject) => subproject.id === state.selectedSubprojectId) || null;
-}
-
-function findTask() {
-  return findSubproject()?.tasks.find((task) => task.id === state.selectedTaskId) || null;
-}
-
-function findItem() {
-  return findTask()?.items.find((item) => item.id === state.selectedItemId) || null;
-}
-
-function activeDetail() {
-  const item = findItem();
-  if (item) return { kind: "Item", value: item, collection: findTask().items };
-  const task = findTask();
-  if (task) return { kind: "Task", value: task, collection: findSubproject().tasks };
-  const subproject = findSubproject();
-  if (subproject) return { kind: "Subproject", value: subproject, collection: findProject().subprojects };
-  const project = findProject();
-  if (project) return { kind: "Project", value: project, collection: state.projects };
-  return null;
 }
 
 function normalizedWeights(count, total = 100) {
@@ -168,12 +185,8 @@ function taskProgress(task) {
   return task.items.reduce((sum, item) => sum + itemProgress(item), 0);
 }
 
-function subprojectProgress(subproject) {
-  return subproject.tasks.reduce((sum, task) => sum + (task.weight * taskProgress(task)) / 100, 0);
-}
-
 function projectProgress(project) {
-  return project.subprojects.reduce((sum, subproject) => sum + (subproject.weight * subprojectProgress(subproject)) / 100, 0);
+  return project.tasks.reduce((sum, task) => sum + (task.weight * taskProgress(task)) / 100, 0);
 }
 
 function formatTime(seconds) {
@@ -185,14 +198,11 @@ function formatTime(seconds) {
 }
 
 function render() {
-  const hasProjects = state.projects.length > 0;
-  const project = findProject();
-  els.emptyState.classList.toggle("hidden", hasProjects);
-  els.editor.classList.toggle("hidden", !hasProjects);
+  els.emptyState.classList.toggle("hidden", state.projects.length > 0 || state.form);
+  els.listView.classList.toggle("hidden", state.projects.length === 0 || state.form);
+  els.formView.classList.toggle("hidden", !state.form);
   renderProjects();
-  if (!hasProjects) return;
-  renderProject(project);
-  renderDetail();
+  if (state.form) renderForm();
 }
 
 function renderProjects() {
@@ -202,174 +212,79 @@ function renderProjects() {
   });
 }
 
-function renderProject(project) {
-  const progress = project ? projectProgress(project) : 0;
-  els.projectTitle.value = project?.title || "";
-  els.projectTitle.placeholder = project ? "Project title" : "Click a project to open it";
-  els.projectTitle.disabled = !project;
-  els.projectProgressText.textContent = `${Math.round(progress)}%`;
-  els.projectProgressBar.style.width = `${progress}%`;
-}
-
-function renderDetail() {
-  const detail = activeDetail();
-  if (!detail) {
-    els.detailKind.textContent = "Details";
-    els.detailTitle.value = "";
-    els.detailWeight.value = "";
-    els.detailDescription.value = "";
-    els.deleteSelectedButton.disabled = true;
-    els.detailWeight.disabled = true;
-    els.addSubprojectButton.disabled = true;
-    els.addTaskButton.disabled = true;
-    els.addItemButton.disabled = true;
-    els.doneGroup.classList.add("hidden");
-    els.timerGroup.classList.add("hidden");
-    renderPhotos(blankNotes());
-    renderVoiceNotes(blankNotes());
-    return;
-  }
-  const { kind, value } = detail;
-  const isProject = kind === "Project";
-  const isItem = kind === "Item";
-
-  els.detailKind.textContent = kind;
-  els.detailTitle.value = value.title;
-  els.deleteSelectedButton.disabled = isProject && state.projects.length === 1;
-  els.detailWeight.disabled = isProject;
-  els.detailWeight.value = isProject ? 100 : value.weight;
-  els.detailDescription.value = value.notes.description || "";
-  els.doneGroup.classList.toggle("hidden", !isItem);
-  els.timerGroup.classList.toggle("hidden", !isItem);
-  els.addSubprojectButton.disabled = !findProject();
-  els.addTaskButton.disabled = !findSubproject();
-  els.addItemButton.disabled = !findTask();
-
-  if (isItem) {
-    els.itemDone.checked = value.isDone;
-    els.timerText.textContent = formatTime(itemElapsed(value));
-    els.startStopTimerButton.textContent = value.timerStartedAt ? "Stop" : "Start";
-  }
-
-  renderPhotos(value.notes);
-  renderVoiceNotes(value.notes);
-}
-
 function projectNode(project) {
   const wrapper = document.createElement("div");
   wrapper.className = "tree-node";
-  const isOpen = project.id === state.selectedProjectId;
+  const isOpen = state.openProjectIds.has(project.id);
   wrapper.append(treeButton({
     title: project.title,
-    meta: `${project.subprojects.length} subprojects`,
+    meta: `${project.tasks.length} tasks`,
     progress: projectProgress(project),
+    open: isOpen,
     depth: 0,
-    open: isOpen,
-    active: isOpen && !state.selectedSubprojectId,
-    onClick: () => {
-      if (isOpen && !state.selectedSubprojectId && !state.selectedTaskId && !state.selectedItemId) {
-        state.selectedProjectId = null;
-      } else {
-        state.selectedProjectId = project.id;
-      }
-      state.selectedSubprojectId = null;
-      state.selectedTaskId = null;
-      state.selectedItemId = null;
-      render();
-    },
+    actions: [
+      { label: "+ Task", className: "secondary-button", onClick: () => openForm("task", "create", { projectId: project.id }) },
+      { label: "Edit", className: "secondary-button", onClick: () => openForm("project", "edit", { projectId: project.id }) },
+      { label: "Delete", className: "danger-button", onClick: () => deleteProject(project.id) },
+    ],
+    onClick: () => toggleSet(state.openProjectIds, project.id),
   }));
 
   if (isOpen) {
     const children = document.createElement("div");
     children.className = "tree-children";
-    if (!project.subprojects.length) {
-      children.append(emptyLine("No subprojects yet."));
-    }
-    project.subprojects.forEach((subproject) => children.append(subprojectNode(subproject)));
+    if (!project.tasks.length) children.append(emptyLine("No tasks yet."));
+    project.tasks.forEach((task) => children.append(taskNode(project, task)));
     wrapper.append(children);
   }
 
   return wrapper;
 }
 
-function subprojectNode(subproject) {
+function taskNode(project, task) {
   const wrapper = document.createElement("div");
   wrapper.className = "tree-node";
-  const isOpen = subproject.id === state.selectedSubprojectId;
-  wrapper.append(treeButton({
-    title: subproject.title,
-    meta: `${subproject.weight}% share | ${subproject.tasks.length} tasks`,
-    progress: subprojectProgress(subproject),
-    depth: 1,
-    open: isOpen,
-    active: isOpen && !state.selectedTaskId,
-    onClick: () => {
-      state.selectedSubprojectId = isOpen ? null : subproject.id;
-      state.selectedTaskId = null;
-      state.selectedItemId = null;
-      render();
-    },
-  }));
-
-  if (isOpen) {
-    const children = document.createElement("div");
-    children.className = "tree-children";
-    if (!subproject.tasks.length) {
-      children.append(emptyLine("No tasks yet."));
-    }
-    subproject.tasks.forEach((task) => children.append(taskNode(task)));
-    wrapper.append(children);
-  }
-
-  return wrapper;
-}
-
-function taskNode(task) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "tree-node";
-  const isOpen = task.id === state.selectedTaskId;
+  const isOpen = state.openTaskIds.has(task.id);
   wrapper.append(treeButton({
     title: task.title,
     meta: `${task.weight}% share | ${task.items.length} items`,
     progress: taskProgress(task),
-    depth: 2,
     open: isOpen,
-    active: isOpen && !state.selectedItemId,
-    onClick: () => {
-      state.selectedTaskId = isOpen ? null : task.id;
-      state.selectedItemId = null;
-      render();
-    },
+    depth: 1,
+    actions: [
+      { label: "+ Item", className: "secondary-button", onClick: () => openForm("item", "create", { projectId: project.id, taskId: task.id }) },
+      { label: "Edit", className: "secondary-button", onClick: () => openForm("task", "edit", { projectId: project.id, taskId: task.id }) },
+      { label: "Delete", className: "danger-button", onClick: () => deleteTask(project.id, task.id) },
+    ],
+    onClick: () => toggleSet(state.openTaskIds, task.id),
   }));
 
   if (isOpen) {
     const children = document.createElement("div");
     children.className = "tree-children";
-    if (!task.items.length) {
-      children.append(emptyLine("No items yet."));
-    }
-    task.items.forEach((item) => children.append(itemNode(item)));
+    if (!task.items.length) children.append(emptyLine("No items yet."));
+    task.items.forEach((item) => children.append(itemNode(project, task, item)));
     wrapper.append(children);
   }
 
   return wrapper;
 }
 
-function itemNode(item) {
+function itemNode(project, task, item) {
   const wrapper = document.createElement("div");
   wrapper.className = "tree-node";
-  const isOpen = item.id === state.selectedItemId;
+  const isOpen = state.openItemIds.has(item.id);
   wrapper.append(treeButton({
     title: `${item.isDone ? "Done: " : ""}${item.title}`,
     meta: `${item.weight}% share | ${formatTime(itemElapsed(item))}`,
     progress: itemProgress(item),
-    depth: 3,
     open: isOpen,
-    active: isOpen,
-    onClick: () => {
-      state.selectedItemId = isOpen ? null : item.id;
-      render();
-    },
+    depth: 2,
+    actions: [
+      { label: "Edit", className: "secondary-button", onClick: () => openForm("item", "edit", { projectId: project.id, taskId: task.id, itemId: item.id }) },
+      { label: "Delete", className: "danger-button", onClick: () => deleteItem(project.id, task.id, item.id) },
+    ],
+    onClick: () => toggleSet(state.openItemIds, item.id),
   }));
 
   if (isOpen) {
@@ -382,11 +297,13 @@ function itemNode(item) {
   return wrapper;
 }
 
-function treeButton({ title, meta, progress, depth, open, active, onClick }) {
+function treeButton({ title, meta, progress, open, depth, actions, onClick }) {
+  const row = document.createElement("div");
+  row.className = `tree-row depth-${depth}`;
+
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `tree-button depth-${depth}`;
-  button.classList.toggle("active", active);
+  button.className = "tree-toggle";
   button.innerHTML = `
     <div class="tree-title"><span class="chevron">${open ? "-" : "+"}</span><span class="title-text"></span><strong>${Math.round(progress)}%</strong></div>
     <div class="progress-bar"><div style="width: ${progress}%"></div></div>
@@ -395,7 +312,23 @@ function treeButton({ title, meta, progress, depth, open, active, onClick }) {
   button.querySelector(".title-text").textContent = title;
   button.querySelector(".tree-meta").textContent = meta;
   button.addEventListener("click", onClick);
-  return button;
+
+  const actionBar = document.createElement("div");
+  actionBar.className = "row-actions";
+  actions.forEach((action) => {
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.className = action.className;
+    actionButton.textContent = action.label;
+    actionButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      action.onClick();
+    });
+    actionBar.append(actionButton);
+  });
+
+  row.append(button, actionBar);
+  return row;
 }
 
 function emptyLine(text) {
@@ -405,19 +338,175 @@ function emptyLine(text) {
   return p;
 }
 
+function toggleSet(set, value) {
+  if (set.has(value)) {
+    set.delete(value);
+  } else {
+    set.add(value);
+  }
+  render();
+}
+
+function findProject(projectId) {
+  return state.projects.find((project) => project.id === projectId) || null;
+}
+
+function findTask(projectId, taskId) {
+  return findProject(projectId)?.tasks.find((task) => task.id === taskId) || null;
+}
+
+function findItem(projectId, taskId, itemId) {
+  return findTask(projectId, taskId)?.items.find((item) => item.id === itemId) || null;
+}
+
+function findCollection(kind, ids) {
+  if (kind === "project") return state.projects;
+  if (kind === "task") return findProject(ids.projectId)?.tasks || [];
+  return findTask(ids.projectId, ids.taskId)?.items || [];
+}
+
+function openForm(kind, mode, ids = {}) {
+  const existing = mode === "edit" ? findExisting(kind, ids) : null;
+  let draft = existing ? clone(existing) : newDraft(kind, ids);
+  state.form = { kind, mode, ids, draft };
+  render();
+}
+
+function findExisting(kind, ids) {
+  if (kind === "project") return findProject(ids.projectId);
+  if (kind === "task") return findTask(ids.projectId, ids.taskId);
+  return findItem(ids.projectId, ids.taskId, ids.itemId);
+}
+
+function newDraft(kind, ids) {
+  if (kind === "project") return newProject();
+  if (kind === "task") return newTask(findProject(ids.projectId));
+  return newItem(findTask(ids.projectId, ids.taskId));
+}
+
+function renderForm() {
+  const { kind, mode, draft } = state.form;
+  const isProject = kind === "project";
+  const isItem = kind === "item";
+
+  els.formKind.textContent = kind[0].toUpperCase() + kind.slice(1);
+  els.formHeading.textContent = `${mode === "create" ? "New" : "Edit"} ${els.formKind.textContent}`;
+  els.formTitle.value = draft.title;
+  els.weightGroup.classList.toggle("hidden", isProject);
+  els.formWeight.value = isProject ? 100 : draft.weight;
+  els.doneGroup.classList.toggle("hidden", !isItem);
+  els.timerGroup.classList.toggle("hidden", !isItem);
+  els.formDone.checked = Boolean(draft.isDone);
+  els.formDescription.value = draft.notes.description || "";
+
+  if (isItem) {
+    els.timerText.textContent = formatTime(itemElapsed(draft));
+    els.startStopTimerButton.textContent = draft.timerStartedAt ? "Stop" : "Start";
+  }
+
+  renderPhotos(draft.notes);
+  renderVoiceNotes(draft.notes);
+}
+
+function syncFormDraft() {
+  if (!state.form) return;
+  const { draft, kind } = state.form;
+  draft.title = els.formTitle.value.trim() || "Untitled";
+  if (kind !== "project") draft.weight = Math.max(0, Math.min(100, Number(els.formWeight.value) || 0));
+  if (kind === "item") draft.isDone = els.formDone.checked;
+  draft.notes.description = els.formDescription.value;
+}
+
+function closeForm() {
+  stopRecordingIfNeeded();
+  state.form = null;
+  render();
+}
+
+function commitForm() {
+  syncFormDraft();
+  const { kind, mode, ids, draft } = state.form;
+
+  if (mode === "create") {
+    const collection = findCollection(kind, ids);
+    collection.push(draft);
+    if (kind !== "project") setWeight(collection, collection.length - 1, draft.weight);
+    if (kind === "project") state.openProjectIds.add(draft.id);
+    if (kind === "task") {
+      state.openProjectIds.add(ids.projectId);
+      state.openTaskIds.add(draft.id);
+    }
+    if (kind === "item") {
+      state.openProjectIds.add(ids.projectId);
+      state.openTaskIds.add(ids.taskId);
+      state.openItemIds.add(draft.id);
+    }
+  } else {
+    const collection = findCollection(kind, ids);
+    const index = collection.findIndex((entry) => entry.id === draft.id);
+    if (index >= 0) {
+      collection[index] = draft;
+      if (kind !== "project") setWeight(collection, index, draft.weight);
+    }
+  }
+
+  save();
+  closeForm();
+}
+
+function deleteProject(projectId) {
+  if (!confirm("Remove this project and all its tasks and items?")) return;
+  state.projects = state.projects.filter((project) => project.id !== projectId);
+  state.openProjectIds.delete(projectId);
+  save();
+  render();
+}
+
+function deleteTask(projectId, taskId) {
+  if (!confirm("Remove this task and all its items?")) return;
+  const project = findProject(projectId);
+  if (!project) return;
+  project.tasks = project.tasks.filter((task) => task.id !== taskId);
+  normalize(project.tasks);
+  state.openTaskIds.delete(taskId);
+  save();
+  render();
+}
+
+function deleteItem(projectId, taskId, itemId) {
+  if (!confirm("Remove this item?")) return;
+  const task = findTask(projectId, taskId);
+  if (!task) return;
+  task.items = task.items.filter((item) => item.id !== itemId);
+  normalize(task.items);
+  state.openItemIds.delete(itemId);
+  save();
+  render();
+}
+
 function renderPhotos(notes) {
   els.photoList.innerHTML = "";
   if (!notes.photos.length) {
     els.photoList.append(emptyLine("No photos attached."));
     return;
   }
+
   notes.photos.forEach((photo) => {
     const tile = document.createElement("div");
     tile.className = "photo-tile";
     const img = document.createElement("img");
     img.src = photo.dataUrl;
     img.alt = photo.name || "Attached photo";
-    tile.append(img);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove-attachment";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      syncFormDraft();
+      notes.photos = notes.photos.filter((entry) => entry.id !== photo.id);
+      renderForm();
+    });
+    tile.append(img, remove);
     els.photoList.append(tile);
   });
 }
@@ -428,155 +517,64 @@ function renderVoiceNotes(notes) {
     els.voiceList.append(emptyLine("No voice notes recorded."));
     return;
   }
+
   notes.voiceRecordings.forEach((recording) => {
     const row = document.createElement("div");
     row.className = "voice-row";
-    const label = document.createElement("span");
-    label.textContent = new Date(recording.createdAt).toLocaleString();
     const audio = document.createElement("audio");
     audio.controls = true;
     audio.src = recording.dataUrl;
-    row.append(label, audio);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-button";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      syncFormDraft();
+      notes.voiceRecordings = notes.voiceRecordings.filter((entry) => entry.id !== recording.id);
+      renderForm();
+    });
+    row.append(audio, remove);
     els.voiceList.append(row);
   });
 }
 
 function selectedNotes() {
-  return activeDetail()?.value.notes || null;
+  return state.form?.draft.notes || null;
 }
 
-function updateDetail(callback) {
-  const detail = activeDetail();
-  if (!detail) return;
-  callback(detail.value, detail);
-  save();
-  render();
-}
+els.addProjectButton.addEventListener("click", () => openForm("project", "create"));
 
-els.addProjectButton.addEventListener("click", () => {
-  const project = newProject(state.projects.length ? state.projects.length + 1 : 0);
-  state.projects.push(project);
-  state.selectedProjectId = project.id;
-  state.selectedSubprojectId = null;
-  state.selectedTaskId = null;
-  state.selectedItemId = null;
-  save();
-  render();
+els.objectForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  commitForm();
 });
 
-els.projectTitle.addEventListener("input", () => {
-  const project = findProject();
-  if (!project) return;
-  project.title = els.projectTitle.value;
-  save();
-  renderProjects();
-  renderDetail();
-});
+els.cancelFormButton.addEventListener("click", closeForm);
 
-els.addSubprojectButton.addEventListener("click", () => {
-  const project = findProject();
-  if (!project) return;
-  const subproject = newSubproject(project.subprojects.length + 1);
-  project.subprojects.push(subproject);
-  normalize(project.subprojects);
-  state.selectedSubprojectId = subproject.id;
-  state.selectedTaskId = null;
-  state.selectedItemId = null;
-  save();
-  render();
-});
-
-els.addTaskButton.addEventListener("click", () => {
-  const subproject = findSubproject();
-  if (!subproject) return;
-  const task = newTask(subproject.tasks.length + 1);
-  subproject.tasks.push(task);
-  normalize(subproject.tasks);
-  state.selectedTaskId = task.id;
-  state.selectedItemId = null;
-  save();
-  render();
-});
-
-els.addItemButton.addEventListener("click", () => {
-  const task = findTask();
-  if (!task) return;
-  const item = newItem(task.items.length + 1);
-  task.items.push(item);
-  normalize(task.items);
-  state.selectedItemId = item.id;
-  save();
-  render();
-});
-
-els.detailTitle.addEventListener("input", () => updateDetail((value) => {
-  value.title = els.detailTitle.value;
-}));
-
-els.detailDescription.addEventListener("input", () => updateDetail((value) => {
-  value.notes.description = els.detailDescription.value;
-}));
-
-els.detailWeight.addEventListener("change", () => {
-  const detail = activeDetail();
-  if (!detail || detail.kind === "Project") return;
-  const index = detail.collection.findIndex((entry) => entry.id === detail.value.id);
-  setWeight(detail.collection, index, els.detailWeight.value);
-  save();
-  render();
-});
-
-els.itemDone.addEventListener("change", () => updateDetail((value) => {
-  value.isDone = els.itemDone.checked;
-}));
-
-els.startStopTimerButton.addEventListener("click", () => updateDetail((value) => {
-  if (!value.timerStartedAt) {
-    value.timerStartedAt = Date.now();
-    return;
-  }
-  value.elapsedSeconds = itemElapsed(value);
-  value.timerStartedAt = null;
-}));
-
-els.resetTimerButton.addEventListener("click", () => updateDetail((value) => {
-  value.elapsedSeconds = 0;
-  value.timerStartedAt = null;
-}));
-
-els.deleteSelectedButton.addEventListener("click", () => {
-  const detail = activeDetail();
-  if (!detail) return;
-  const index = detail.collection.findIndex((entry) => entry.id === detail.value.id);
-  if (index < 0) return;
-  detail.collection.splice(index, 1);
-
-  if (detail.kind === "Project") {
-    state.selectedProjectId = state.projects[0]?.id || null;
-    state.selectedSubprojectId = null;
-    state.selectedTaskId = null;
-    state.selectedItemId = null;
-  } else if (detail.kind === "Subproject") {
-    normalize(detail.collection);
-    state.selectedSubprojectId = null;
-    state.selectedTaskId = null;
-    state.selectedItemId = null;
-  } else if (detail.kind === "Task") {
-    normalize(detail.collection);
-    state.selectedTaskId = null;
-    state.selectedItemId = null;
+els.startStopTimerButton.addEventListener("click", () => {
+  if (!state.form || state.form.kind !== "item") return;
+  syncFormDraft();
+  const item = state.form.draft;
+  if (!item.timerStartedAt) {
+    item.timerStartedAt = Date.now();
   } else {
-    normalize(detail.collection);
-    state.selectedItemId = null;
+    item.elapsedSeconds = itemElapsed(item);
+    item.timerStartedAt = null;
   }
+  renderForm();
+});
 
-  save();
-  render();
+els.resetTimerButton.addEventListener("click", () => {
+  if (!state.form || state.form.kind !== "item") return;
+  state.form.draft.elapsedSeconds = 0;
+  state.form.draft.timerStartedAt = null;
+  renderForm();
 });
 
 els.photoInput.addEventListener("change", async () => {
   const notes = selectedNotes();
   if (!notes) return;
+  syncFormDraft();
   const files = Array.from(els.photoInput.files || []);
   for (const file of files) {
     notes.photos.push({
@@ -587,8 +585,7 @@ els.photoInput.addEventListener("change", async () => {
     });
   }
   els.photoInput.value = "";
-  save();
-  render();
+  renderForm();
 });
 
 els.recordButton.addEventListener("click", async () => {
@@ -603,6 +600,7 @@ els.recordButton.addEventListener("click", async () => {
   }
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  syncFormDraft();
   state.recordingChunks = [];
   state.recorder = new MediaRecorder(stream);
   state.recorder.ondataavailable = (event) => state.recordingChunks.push(event.data);
@@ -616,13 +614,19 @@ els.recordButton.addEventListener("click", async () => {
       createdAt: new Date().toISOString(),
       dataUrl: await blobToDataURL(blob),
     });
+    state.recorder = null;
     els.recordButton.textContent = "Record";
-    save();
-    render();
+    renderForm();
   };
   state.recorder.start();
   els.recordButton.textContent = "Stop";
 });
+
+function stopRecordingIfNeeded() {
+  if (state.recorder?.state === "recording") {
+    state.recorder.stop();
+  }
+}
 
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -638,12 +642,11 @@ function blobToDataURL(blob) {
 }
 
 setInterval(() => {
-  const item = findItem();
-  if (item?.timerStartedAt) {
-    els.timerText.textContent = formatTime(itemElapsed(item));
-    renderProjects();
-    save();
+  if (state.form?.kind === "item" && state.form.draft.timerStartedAt) {
+    els.timerText.textContent = formatTime(itemElapsed(state.form.draft));
   }
+  renderProjects();
+  save();
 }, 1000);
 
 window.addEventListener("beforeunload", save);
