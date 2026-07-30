@@ -26,6 +26,10 @@ const els = {
   formWeight: document.querySelector("#formWeight"),
   doneGroup: document.querySelector("#doneGroup"),
   formDone: document.querySelector("#formDone"),
+  currentProgressGroup: document.querySelector("#currentProgressGroup"),
+  formCurrentProgress: document.querySelector("#formCurrentProgress"),
+  maxProgressGroup: document.querySelector("#maxProgressGroup"),
+  formMaxProgress: document.querySelector("#formMaxProgress"),
   timerGroup: document.querySelector("#timerGroup"),
   timerText: document.querySelector("#timerText"),
   startStopTimerButton: document.querySelector("#startStopTimerButton"),
@@ -62,6 +66,8 @@ function newItem(task) {
     title: `Item ${task.items.length + 1}`,
     weight: weights[weights.length - 1],
     isDone: false,
+    currentProgress: 0,
+    maxProgress: 100,
     notes: blankNotes(),
     elapsedSeconds: 0,
     timerStartedAt: null,
@@ -89,11 +95,7 @@ function migrateProjects(projects) {
       project.tasks.forEach((task) => {
         task.notes = task.notes || blankNotes();
         task.items = task.items || [];
-        task.items.forEach((item) => {
-          item.notes = item.notes || blankNotes();
-          item.elapsedSeconds = item.elapsedSeconds || 0;
-          item.timerStartedAt = item.timerStartedAt || null;
-        });
+        task.items.forEach(ensureItemProgress);
         normalize(task.items);
       });
       normalize(project.tasks);
@@ -118,10 +120,23 @@ function migrateProjects(projects) {
       notes: project.notes || blankNotes(),
       tasks,
     };
-    migrated.tasks.forEach((task) => normalize(task.items));
+    migrated.tasks.forEach((task) => {
+      task.items.forEach(ensureItemProgress);
+      normalize(task.items);
+    });
     normalize(migrated.tasks);
     return migrated;
   });
+}
+
+function ensureItemProgress(item) {
+  item.notes = item.notes || blankNotes();
+  item.elapsedSeconds = item.elapsedSeconds || 0;
+  item.timerStartedAt = item.timerStartedAt || null;
+  item.maxProgress = Math.max(1, Number(item.maxProgress) || 100);
+  const fallbackCurrent = item.isDone ? item.maxProgress : 0;
+  item.currentProgress = Math.max(0, Math.min(item.maxProgress, Number(item.currentProgress) || fallbackCurrent));
+  item.isDone = item.currentProgress >= item.maxProgress;
 }
 
 function save() {
@@ -178,7 +193,14 @@ function itemElapsed(item) {
 }
 
 function itemProgress(item) {
-  return item.isDone ? item.weight : 0;
+  const ratio = itemProgressRatio(item);
+  return item.weight * ratio;
+}
+
+function itemProgressRatio(item) {
+  const maxProgress = Math.max(1, Number(item.maxProgress) || 100);
+  const currentProgress = Math.max(0, Math.min(maxProgress, Number(item.currentProgress) || 0));
+  return currentProgress / maxProgress;
 }
 
 function taskProgress(task) {
@@ -195,6 +217,12 @@ function formatTime(seconds) {
   const minutes = Math.floor((rounded % 3600) / 60).toString().padStart(2, "0");
   const secs = (rounded % 60).toString().padStart(2, "0");
   return `${hours}:${minutes}:${secs}`;
+}
+
+function formatProgressCount(item) {
+  const maxProgress = Math.max(1, Number(item.maxProgress) || 100);
+  const currentProgress = Math.max(0, Math.min(maxProgress, Number(item.currentProgress) || 0));
+  return `${currentProgress}/${maxProgress}`;
 }
 
 function render() {
@@ -276,8 +304,8 @@ function itemNode(project, task, item) {
   const isOpen = state.openItemIds.has(item.id);
   wrapper.append(treeButton({
     title: `${item.isDone ? "Done: " : ""}${item.title}`,
-    meta: `${item.weight}% share | ${formatTime(itemElapsed(item))}`,
-    progress: itemProgress(item),
+    meta: `${item.weight}% share | ${formatProgressCount(item)} | ${formatTime(itemElapsed(item))}`,
+    progress: itemProgressRatio(item) * 100,
     open: isOpen,
     depth: 2,
     actions: [
@@ -395,8 +423,12 @@ function renderForm() {
   els.weightGroup.classList.toggle("hidden", isProject);
   els.formWeight.value = isProject ? 100 : draft.weight;
   els.doneGroup.classList.toggle("hidden", !isItem);
+  els.currentProgressGroup.classList.toggle("hidden", !isItem);
+  els.maxProgressGroup.classList.toggle("hidden", !isItem);
   els.timerGroup.classList.toggle("hidden", !isItem);
   els.formDone.checked = Boolean(draft.isDone);
+  els.formCurrentProgress.value = draft.currentProgress ?? 0;
+  els.formMaxProgress.value = draft.maxProgress ?? 100;
   els.formDescription.value = draft.notes.description || "";
 
   if (isItem) {
@@ -413,7 +445,11 @@ function syncFormDraft() {
   const { draft, kind } = state.form;
   draft.title = els.formTitle.value.trim() || "Untitled";
   if (kind !== "project") draft.weight = Math.max(0, Math.min(100, Number(els.formWeight.value) || 0));
-  if (kind === "item") draft.isDone = els.formDone.checked;
+  if (kind === "item") {
+    draft.maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
+    draft.currentProgress = Math.max(0, Math.min(draft.maxProgress, Number(els.formCurrentProgress.value) || 0));
+    draft.isDone = draft.currentProgress >= draft.maxProgress;
+  }
   draft.notes.description = els.formDescription.value;
 }
 
@@ -550,6 +586,12 @@ els.objectForm.addEventListener("submit", (event) => {
 });
 
 els.cancelFormButton.addEventListener("click", closeForm);
+
+els.formDone.addEventListener("change", () => {
+  if (!state.form || state.form.kind !== "item") return;
+  const maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
+  els.formCurrentProgress.value = els.formDone.checked ? maxProgress : 0;
+});
 
 els.startStopTimerButton.addEventListener("click", () => {
   if (!state.form || state.form.kind !== "item") return;
