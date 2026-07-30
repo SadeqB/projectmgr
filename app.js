@@ -22,9 +22,6 @@ const els = {
   addSubprojectButton: document.querySelector("#addSubprojectButton"),
   addTaskButton: document.querySelector("#addTaskButton"),
   addItemButton: document.querySelector("#addItemButton"),
-  subprojectList: document.querySelector("#subprojectList"),
-  taskList: document.querySelector("#taskList"),
-  itemList: document.querySelector("#itemList"),
   detailKind: document.querySelector("#detailKind"),
   detailTitle: document.querySelector("#detailTitle"),
   deleteSelectedButton: document.querySelector("#deleteSelectedButton"),
@@ -80,7 +77,6 @@ function load() {
   } catch {
     state.projects = [];
   }
-  state.selectedProjectId = state.projects[0]?.id || null;
 }
 
 function save() {
@@ -189,108 +185,50 @@ function formatTime(seconds) {
 }
 
 function render() {
+  const hasProjects = state.projects.length > 0;
   const project = findProject();
-  els.emptyState.classList.toggle("hidden", Boolean(project));
-  els.editor.classList.toggle("hidden", !project);
+  els.emptyState.classList.toggle("hidden", hasProjects);
+  els.editor.classList.toggle("hidden", !hasProjects);
   renderProjects();
-  if (!project) return;
+  if (!hasProjects) return;
   renderProject(project);
-  renderSubprojects(project);
-  renderTasks();
-  renderItems();
   renderDetail();
 }
 
 function renderProjects() {
   els.projectList.innerHTML = "";
   state.projects.forEach((project) => {
-    const button = cardButton(project.title, `${project.subprojects.length} subprojects`, projectProgress(project));
-    button.classList.toggle("active", project.id === state.selectedProjectId);
-    button.addEventListener("click", () => {
-      state.selectedProjectId = project.id;
-      state.selectedSubprojectId = null;
-      state.selectedTaskId = null;
-      state.selectedItemId = null;
-      render();
-    });
-    els.projectList.append(button);
+    els.projectList.append(projectNode(project));
   });
 }
 
 function renderProject(project) {
-  const progress = projectProgress(project);
-  els.projectTitle.value = project.title;
+  const progress = project ? projectProgress(project) : 0;
+  els.projectTitle.value = project?.title || "";
+  els.projectTitle.placeholder = project ? "Project title" : "Click a project to open it";
+  els.projectTitle.disabled = !project;
   els.projectProgressText.textContent = `${Math.round(progress)}%`;
   els.projectProgressBar.style.width = `${progress}%`;
 }
 
-function renderSubprojects(project) {
-  els.subprojectList.innerHTML = "";
-  if (!project.subprojects.length) {
-    els.subprojectList.append(emptyLine("Add a subproject."));
-    return;
-  }
-  project.subprojects.forEach((subproject) => {
-    const button = cardButton(subproject.title, `${subproject.weight}% share`, subprojectProgress(subproject));
-    button.classList.toggle("active", subproject.id === state.selectedSubprojectId);
-    button.addEventListener("click", () => {
-      state.selectedSubprojectId = subproject.id;
-      state.selectedTaskId = null;
-      state.selectedItemId = null;
-      render();
-    });
-    els.subprojectList.append(button);
-  });
-}
-
-function renderTasks() {
-  const subproject = findSubproject();
-  els.taskList.innerHTML = "";
-  if (!subproject) {
-    els.taskList.append(emptyLine("Select a subproject."));
-    return;
-  }
-  if (!subproject.tasks.length) {
-    els.taskList.append(emptyLine("Add a task."));
-    return;
-  }
-  subproject.tasks.forEach((task) => {
-    const button = cardButton(task.title, `${task.weight}% share`, taskProgress(task));
-    button.classList.toggle("active", task.id === state.selectedTaskId);
-    button.addEventListener("click", () => {
-      state.selectedTaskId = task.id;
-      state.selectedItemId = null;
-      render();
-    });
-    els.taskList.append(button);
-  });
-}
-
-function renderItems() {
-  const task = findTask();
-  els.itemList.innerHTML = "";
-  if (!task) {
-    els.itemList.append(emptyLine("Select a task."));
-    return;
-  }
-  if (!task.items.length) {
-    els.itemList.append(emptyLine("Add an item."));
-    return;
-  }
-  task.items.forEach((item) => {
-    const button = cardButton(`${item.isDone ? "✓ " : ""}${item.title}`, `${item.weight}% share · ${formatTime(itemElapsed(item))}`, itemProgress(item));
-    button.classList.toggle("active", item.id === state.selectedItemId);
-    button.addEventListener("click", () => {
-      state.selectedItemId = item.id;
-      render();
-    });
-    els.itemList.append(button);
-  });
-}
-
 function renderDetail() {
   const detail = activeDetail();
-  if (!detail) return;
+  if (!detail) {
+    els.detailKind.textContent = "Details";
+    els.detailTitle.value = "";
+    els.detailWeight.value = "";
+    els.detailDescription.value = "";
+    els.deleteSelectedButton.disabled = true;
+    els.detailWeight.disabled = true;
+    els.addSubprojectButton.disabled = true;
+    els.addTaskButton.disabled = true;
+    els.addItemButton.disabled = true;
+    els.doneGroup.classList.add("hidden");
+    els.timerGroup.classList.add("hidden");
+    renderPhotos(blankNotes());
+    renderVoiceNotes(blankNotes());
+    return;
+  }
   const { kind, value } = detail;
   const isProject = kind === "Project";
   const isItem = kind === "Item";
@@ -303,6 +241,9 @@ function renderDetail() {
   els.detailDescription.value = value.notes.description || "";
   els.doneGroup.classList.toggle("hidden", !isItem);
   els.timerGroup.classList.toggle("hidden", !isItem);
+  els.addSubprojectButton.disabled = !findProject();
+  els.addTaskButton.disabled = !findSubproject();
+  els.addItemButton.disabled = !findTask();
 
   if (isItem) {
     els.itemDone.checked = value.isDone;
@@ -314,17 +255,146 @@ function renderDetail() {
   renderVoiceNotes(value.notes);
 }
 
-function cardButton(title, meta, progress) {
+function projectNode(project) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "tree-node";
+  const isOpen = project.id === state.selectedProjectId;
+  wrapper.append(treeButton({
+    title: project.title,
+    meta: `${project.subprojects.length} subprojects`,
+    progress: projectProgress(project),
+    depth: 0,
+    open: isOpen,
+    active: isOpen && !state.selectedSubprojectId,
+    onClick: () => {
+      if (isOpen && !state.selectedSubprojectId && !state.selectedTaskId && !state.selectedItemId) {
+        state.selectedProjectId = null;
+      } else {
+        state.selectedProjectId = project.id;
+      }
+      state.selectedSubprojectId = null;
+      state.selectedTaskId = null;
+      state.selectedItemId = null;
+      render();
+    },
+  }));
+
+  if (isOpen) {
+    const children = document.createElement("div");
+    children.className = "tree-children";
+    if (!project.subprojects.length) {
+      children.append(emptyLine("No subprojects yet."));
+    }
+    project.subprojects.forEach((subproject) => children.append(subprojectNode(subproject)));
+    wrapper.append(children);
+  }
+
+  return wrapper;
+}
+
+function subprojectNode(subproject) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "tree-node";
+  const isOpen = subproject.id === state.selectedSubprojectId;
+  wrapper.append(treeButton({
+    title: subproject.title,
+    meta: `${subproject.weight}% share | ${subproject.tasks.length} tasks`,
+    progress: subprojectProgress(subproject),
+    depth: 1,
+    open: isOpen,
+    active: isOpen && !state.selectedTaskId,
+    onClick: () => {
+      state.selectedSubprojectId = isOpen ? null : subproject.id;
+      state.selectedTaskId = null;
+      state.selectedItemId = null;
+      render();
+    },
+  }));
+
+  if (isOpen) {
+    const children = document.createElement("div");
+    children.className = "tree-children";
+    if (!subproject.tasks.length) {
+      children.append(emptyLine("No tasks yet."));
+    }
+    subproject.tasks.forEach((task) => children.append(taskNode(task)));
+    wrapper.append(children);
+  }
+
+  return wrapper;
+}
+
+function taskNode(task) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "tree-node";
+  const isOpen = task.id === state.selectedTaskId;
+  wrapper.append(treeButton({
+    title: task.title,
+    meta: `${task.weight}% share | ${task.items.length} items`,
+    progress: taskProgress(task),
+    depth: 2,
+    open: isOpen,
+    active: isOpen && !state.selectedItemId,
+    onClick: () => {
+      state.selectedTaskId = isOpen ? null : task.id;
+      state.selectedItemId = null;
+      render();
+    },
+  }));
+
+  if (isOpen) {
+    const children = document.createElement("div");
+    children.className = "tree-children";
+    if (!task.items.length) {
+      children.append(emptyLine("No items yet."));
+    }
+    task.items.forEach((item) => children.append(itemNode(item)));
+    wrapper.append(children);
+  }
+
+  return wrapper;
+}
+
+function itemNode(item) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "tree-node";
+  const isOpen = item.id === state.selectedItemId;
+  wrapper.append(treeButton({
+    title: `${item.isDone ? "Done: " : ""}${item.title}`,
+    meta: `${item.weight}% share | ${formatTime(itemElapsed(item))}`,
+    progress: itemProgress(item),
+    depth: 3,
+    open: isOpen,
+    active: isOpen,
+    onClick: () => {
+      state.selectedItemId = isOpen ? null : item.id;
+      render();
+    },
+  }));
+
+  if (isOpen) {
+    const description = document.createElement("div");
+    description.className = "item-description";
+    description.textContent = item.notes.description || "No description yet.";
+    wrapper.append(description);
+  }
+
+  return wrapper;
+}
+
+function treeButton({ title, meta, progress, depth, open, active, onClick }) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "card-button";
+  button.className = `tree-button depth-${depth}`;
+  button.classList.toggle("active", active);
   button.innerHTML = `
-    <div class="card-title"><span></span><strong>${Math.round(progress)}%</strong></div>
+    <div class="tree-title"><span class="chevron">${open ? "-" : "+"}</span><span class="title-text"></span><strong>${Math.round(progress)}%</strong></div>
     <div class="progress-bar"><div style="width: ${progress}%"></div></div>
-    <div class="card-meta"></div>
+    <div class="tree-meta"></div>
   `;
-  button.querySelector("span").textContent = title;
-  button.querySelector(".card-meta").textContent = meta;
+  button.querySelector(".title-text").textContent = title;
+  button.querySelector(".tree-meta").textContent = meta;
+  button.addEventListener("click", onClick);
   return button;
 }
 
@@ -571,7 +641,7 @@ setInterval(() => {
   const item = findItem();
   if (item?.timerStartedAt) {
     els.timerText.textContent = formatTime(itemElapsed(item));
-    renderItems();
+    renderProjects();
     save();
   }
 }, 1000);

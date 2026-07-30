@@ -111,14 +111,7 @@ button {
   padding: 20px;
 }
 
-.layout-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(220px, 1fr));
-  gap: 16px;
-}
-
 .panel {
-  min-height: 280px;
   padding: 16px;
 }
 
@@ -244,7 +237,26 @@ input[type="number"] {
   font-size: 22px;
 }
 
-.card-button {
+.tree-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.tree-node {
+  display: grid;
+  gap: 8px;
+}
+
+.tree-children {
+  display: grid;
+  gap: 8px;
+  margin-left: 20px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+}
+
+.tree-button {
   width: 100%;
   display: grid;
   gap: 8px;
@@ -256,32 +268,61 @@ input[type="number"] {
   color: var(--text);
 }
 
-.sidebar .card-button {
-  color: #eef4ff;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.card-button.active {
+.tree-button.active {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 
-.card-title {
+.tree-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   font-weight: 800;
 }
 
-.card-meta {
+.tree-title strong {
+  margin-left: auto;
+  color: var(--blue);
+}
+
+.chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--blue);
+  flex: 0 0 auto;
+  font-weight: 900;
+}
+
+.tree-meta {
   color: var(--muted);
   font-size: 13px;
 }
 
-.sidebar .card-meta {
-  color: #b7c4d7;
+.depth-1 {
+  background: #f8fafc;
+}
+
+.depth-2 {
+  background: #fff;
+}
+
+.depth-3 {
+  background: #f8fafc;
+}
+
+.item-description {
+  margin-left: 56px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .detail-panel {
@@ -404,10 +445,27 @@ input[type="number"] {
   }
 
   .editor-header,
-  .layout-grid,
   .detail-grid,
   .attachment-grid {
     grid-template-columns: 1fr;
+  }
+
+  .panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-header .button-row {
+    flex-wrap: wrap;
+  }
+
+  .tree-children {
+    margin-left: 8px;
+    padding-left: 10px;
+  }
+
+  .item-description {
+    margin-left: 18px;
   }
 
   .timer-group {

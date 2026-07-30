@@ -24,7 +24,6 @@
         </div>
 
         <button id="addProjectButton" class="primary-button" type="button">+ Project</button>
-        <div id="projectList" class="project-list"></div>
       </aside>
 
       <main class="workspace">
@@ -45,31 +44,17 @@
             </div>
           </header>
 
-          <div class="layout-grid">
-            <section class="panel">
-              <div class="panel-header">
-                <h2>Subprojects</h2>
-                <button id="addSubprojectButton" class="icon-button" type="button" title="Add subproject">+</button>
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Projects</h2>
+              <div class="button-row">
+                <button id="addSubprojectButton" class="secondary-button" type="button">+ Subproject</button>
+                <button id="addTaskButton" class="secondary-button" type="button">+ Task</button>
+                <button id="addItemButton" class="secondary-button" type="button">+ Item</button>
               </div>
-              <div id="subprojectList" class="stack-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <h2>Tasks</h2>
-                <button id="addTaskButton" class="icon-button" type="button" title="Add task">+</button>
-              </div>
-              <div id="taskList" class="stack-list"></div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <h2>To Do Items</h2>
-                <button id="addItemButton" class="icon-button" type="button" title="Add item">+</button>
-              </div>
-              <div id="itemList" class="stack-list"></div>
-            </section>
-          </div>
+            </div>
+            <div id="projectList" class="tree-list"></div>
+          </section>
 
           <section class="detail-panel">
             <div class="detail-header">
