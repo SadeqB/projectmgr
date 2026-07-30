@@ -14,6 +14,7 @@ const state = {
   showingDeadlines: false,
   showingGantt: false,
   showingAbout: false,
+  menuOpen: false,
   form: null,
   serverStorageAvailable: false,
   recorder: null,
@@ -21,6 +22,9 @@ const state = {
 };
 
 const els = {
+  menuToggleButton: document.querySelector("#menuToggleButton"),
+  menuBackdrop: document.querySelector("#menuBackdrop"),
+  sidebar: document.querySelector("#sidebar"),
   addProjectButton: document.querySelector("#addProjectButton"),
   showDeadlinesButton: document.querySelector("#showDeadlinesButton"),
   showGanttButton: document.querySelector("#showGanttButton"),
@@ -413,6 +417,10 @@ function weekLabel(date) {
 function render() {
   const hasProjects = state.projects.length > 0;
   const showingSecondaryPage = Boolean(state.form || state.detailsProjectId || state.showingDeadlines || state.showingGantt || state.showingAbout);
+  document.body.classList.toggle("menu-open", state.menuOpen);
+  els.menuBackdrop.hidden = !state.menuOpen;
+  els.menuToggleButton.setAttribute("aria-expanded", String(state.menuOpen));
+  els.menuToggleButton.setAttribute("aria-label", state.menuOpen ? "Close menu" : "Open menu");
   els.emptyState.classList.toggle("hidden", hasProjects || showingSecondaryPage);
   els.listView.classList.toggle("hidden", !hasProjects || showingSecondaryPage);
   els.formView.classList.toggle("hidden", !state.form);
@@ -916,6 +924,10 @@ function closeAbout() {
   render();
 }
 
+function closeMenu() {
+  state.menuOpen = false;
+}
+
 async function commitForm() {
   syncFormDraft();
   const { kind, mode, ids, draft } = state.form;
@@ -1031,10 +1043,24 @@ function selectedNotes() {
   return state.form?.draft.notes || null;
 }
 
-els.addProjectButton.addEventListener("click", () => openForm("project", "create"));
+els.menuToggleButton.addEventListener("click", () => {
+  state.menuOpen = !state.menuOpen;
+  render();
+});
+
+els.menuBackdrop.addEventListener("click", () => {
+  state.menuOpen = false;
+  render();
+});
+
+els.addProjectButton.addEventListener("click", () => {
+  closeMenu();
+  openForm("project", "create");
+});
 
 els.showDeadlinesButton.addEventListener("click", async () => {
   await refreshProjectsFromStorage();
+  closeMenu();
   state.showingDeadlines = true;
   state.detailsProjectId = null;
   state.showingGantt = false;
@@ -1045,6 +1071,7 @@ els.showDeadlinesButton.addEventListener("click", async () => {
 
 els.showGanttButton.addEventListener("click", async () => {
   await refreshProjectsFromStorage();
+  closeMenu();
   state.showingGantt = true;
   state.showingDeadlines = false;
   state.detailsProjectId = null;
@@ -1055,6 +1082,7 @@ els.showGanttButton.addEventListener("click", async () => {
 
 els.showAboutButton.addEventListener("click", async () => {
   await refreshProjectsFromStorage();
+  closeMenu();
   state.showingAbout = true;
   state.showingGantt = false;
   state.showingDeadlines = false;
@@ -1079,6 +1107,7 @@ els.formDeadline.addEventListener("input", () => {
 });
 
 els.exportDataButton.addEventListener("click", () => {
+  closeMenu();
   const blob = new Blob([JSON.stringify(createDataDocument(), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -1103,12 +1132,19 @@ els.importDataInput.addEventListener("change", async () => {
     state.openTaskIds.clear();
     state.openItemIds.clear();
     await save();
+    closeMenu();
     render();
   } catch {
     alert("Could not import this JSON file.");
   } finally {
     els.importDataInput.value = "";
   }
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !state.menuOpen) return;
+  state.menuOpen = false;
+  render();
 });
 
 els.objectForm.addEventListener("submit", (event) => {

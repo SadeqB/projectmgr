@@ -14,8 +14,14 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <button id="menuToggleButton" class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div id="menuBackdrop" class="menu-backdrop" hidden></div>
     <div class="app-shell">
-      <aside class="sidebar">
+      <aside id="sidebar" class="sidebar" aria-label="Main menu">
         <div class="brand">
           <div>
             <h1>Project Time Manager</h1>

@@ -35,18 +35,68 @@ button {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: 320px 1fr;
   min-height: 100vh;
 }
 
+.menu-toggle {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 40;
+  display: inline-grid;
+  place-items: center;
+  gap: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.menu-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text);
+}
+
+.menu-open .menu-toggle {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+.menu-open .menu-toggle span {
+  background: #eef4ff;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(16, 24, 39, 0.36);
+}
+
 .sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 30;
+  width: min(320px, calc(100vw - 36px));
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 24px;
+  padding: 74px 24px 24px;
   background: #101827;
   color: #eef4ff;
+  transform: translateX(-100%);
+  transition: transform 180ms ease;
+}
+
+.menu-open .sidebar {
+  transform: translateX(0);
 }
 
 .sidebar-actions {
@@ -81,7 +131,7 @@ button {
 }
 
 .workspace {
-  padding: 28px;
+  padding: 78px 28px 28px;
   overflow: auto;
 }
 
