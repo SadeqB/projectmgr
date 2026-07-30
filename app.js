@@ -28,6 +28,7 @@ const els = {
   formDone: document.querySelector("#formDone"),
   currentProgressGroup: document.querySelector("#currentProgressGroup"),
   formCurrentProgress: document.querySelector("#formCurrentProgress"),
+  formCurrentProgressText: document.querySelector("#formCurrentProgressText"),
   maxProgressGroup: document.querySelector("#maxProgressGroup"),
   formMaxProgress: document.querySelector("#formMaxProgress"),
   timerGroup: document.querySelector("#timerGroup"),
@@ -427,8 +428,8 @@ function renderForm() {
   els.maxProgressGroup.classList.toggle("hidden", !isItem);
   els.timerGroup.classList.toggle("hidden", !isItem);
   els.formDone.checked = Boolean(draft.isDone);
-  els.formCurrentProgress.value = draft.currentProgress ?? 0;
   els.formMaxProgress.value = draft.maxProgress ?? 100;
+  updateProgressSlider(draft.currentProgress ?? 0, draft.maxProgress ?? 100);
   els.formDescription.value = draft.notes.description || "";
 
   if (isItem) {
@@ -590,7 +591,21 @@ els.cancelFormButton.addEventListener("click", closeForm);
 els.formDone.addEventListener("change", () => {
   if (!state.form || state.form.kind !== "item") return;
   const maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
-  els.formCurrentProgress.value = els.formDone.checked ? maxProgress : 0;
+  updateProgressSlider(els.formDone.checked ? maxProgress : 0, maxProgress);
+});
+
+els.formMaxProgress.addEventListener("input", () => {
+  if (!state.form || state.form.kind !== "item") return;
+  const maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
+  updateProgressSlider(Math.min(Number(els.formCurrentProgress.value) || 0, maxProgress), maxProgress);
+});
+
+els.formCurrentProgress.addEventListener("input", () => {
+  if (!state.form || state.form.kind !== "item") return;
+  const currentProgress = Number(els.formCurrentProgress.value) || 0;
+  const maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
+  els.formCurrentProgressText.textContent = String(currentProgress);
+  els.formDone.checked = currentProgress >= maxProgress;
 });
 
 els.startStopTimerButton.addEventListener("click", () => {
@@ -668,6 +683,15 @@ function stopRecordingIfNeeded() {
   if (state.recorder?.state === "recording") {
     state.recorder.stop();
   }
+}
+
+function updateProgressSlider(currentProgress, maxProgress) {
+  const safeMax = Math.max(1, Number(maxProgress) || 1);
+  const safeCurrent = Math.max(0, Math.min(safeMax, Number(currentProgress) || 0));
+  els.formCurrentProgress.max = String(safeMax);
+  els.formCurrentProgress.value = String(safeCurrent);
+  els.formCurrentProgressText.textContent = String(safeCurrent);
+  els.formDone.checked = safeCurrent >= safeMax;
 }
 
 function fileToDataURL(file) {

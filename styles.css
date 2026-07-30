@@ -364,6 +364,26 @@ input[type="number"] {
   gap: 6px;
 }
 
+.slider-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(48px, auto);
+  gap: 12px;
+  align-items: center;
+  min-height: 38px;
+}
+
+.slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--blue);
+}
+
+.slider-row strong {
+  min-width: 48px;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .wide {
   margin-top: 12px;
 }
