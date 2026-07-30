@@ -1,4 +1,4 @@
-const CACHE_NAME = "project-time-manager-v16";
+const CACHE_NAME = "project-time-manager-v17";
 const APP_SHELL = [
   "./",
   "./index.html",
