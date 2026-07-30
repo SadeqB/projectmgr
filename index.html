@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101827" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Project Time" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Project Time Manager</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <h1>Project Time Manager</h1>
+            <p>Projects, progress, and focused work time.</p>
+          </div>
+        </div>
+
+        <button id="addProjectButton" class="primary-button" type="button">+ Project</button>
+        <div id="projectList" class="project-list"></div>
+      </aside>
+
+      <main class="workspace">
+        <section id="emptyState" class="empty-state">
+          <h2>No project selected</h2>
+          <p>Create a project or choose one from the left.</p>
+        </section>
+
+        <section id="editor" class="editor hidden">
+          <header class="editor-header">
+            <div>
+              <label class="field-label" for="projectTitle">Project</label>
+              <input id="projectTitle" class="title-input" type="text" />
+            </div>
+            <div class="progress-block">
+              <span id="projectProgressText">0%</span>
+              <div class="progress-bar"><div id="projectProgressBar"></div></div>
+            </div>
+          </header>
+
+          <div class="layout-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Subprojects</h2>
+                <button id="addSubprojectButton" class="icon-button" type="button" title="Add subproject">+</button>
+              </div>
+              <div id="subprojectList" class="stack-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Tasks</h2>
+                <button id="addTaskButton" class="icon-button" type="button" title="Add task">+</button>
+              </div>
+              <div id="taskList" class="stack-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>To Do Items</h2>
+                <button id="addItemButton" class="icon-button" type="button" title="Add item">+</button>
+              </div>
+              <div id="itemList" class="stack-list"></div>
+            </section>
+          </div>
+
+          <section class="detail-panel">
+            <div class="detail-header">
+              <div>
+                <span id="detailKind" class="eyebrow">Details</span>
+                <input id="detailTitle" class="detail-title" type="text" />
+              </div>
+              <button id="deleteSelectedButton" class="danger-button" type="button">Delete</button>
+            </div>
+
+            <div class="detail-grid">
+              <label class="field-group">
+                <span class="field-label">Share</span>
+                <input id="detailWeight" type="number" min="0" max="100" />
+              </label>
+
+              <label id="doneGroup" class="check-group hidden">
+                <input id="itemDone" type="checkbox" />
+                <span>Done</span>
+              </label>
+
+              <div id="timerGroup" class="timer-group hidden">
+                <div id="timerText" class="timer-text">0:00:00</div>
+                <div class="button-row">
+                  <button id="startStopTimerButton" class="primary-button" type="button">Start</button>
+                  <button id="resetTimerButton" class="secondary-button" type="button">Reset</button>
+                </div>
+              </div>
+            </div>
+
+            <label class="field-group wide">
+              <span class="field-label">Description</span>
+              <textarea id="detailDescription" rows="5"></textarea>
+            </label>
+
+            <div class="attachment-grid">
+              <section>
+                <div class="mini-header">
+                  <h3>Photos</h3>
+                  <label class="secondary-button file-button">
+                    Attach
+                    <input id="photoInput" type="file" accept="image/*" multiple />
+                  </label>
+                </div>
+                <div id="photoList" class="photo-grid"></div>
+              </section>
+
+              <section>
+                <div class="mini-header">
+                  <h3>Voice Notes</h3>
+                  <button id="recordButton" class="secondary-button" type="button">Record</button>
+                </div>
+                <div id="voiceList" class="voice-list"></div>
+              </section>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

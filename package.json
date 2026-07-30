@@ -1,0 +1,9 @@
+{
+  "name": "project-time-manager-web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check server.js && node --check service-worker.js"
+  }
+}
