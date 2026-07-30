@@ -49,6 +49,19 @@ button {
   color: #eef4ff;
 }
 
+.sidebar-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.sidebar .secondary-button {
+  width: 100%;
+  color: #eef4ff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  text-align: center;
+}
+
 .brand h1 {
   margin: 0;
   font-size: 24px;
@@ -174,7 +187,7 @@ input[type="number"] {
 
 .progress-block span {
   justify-self: end;
-  color: var(--blue);
+  color: var(--project-color, var(--blue));
   font-size: 28px;
   font-weight: 800;
 }
@@ -184,12 +197,13 @@ input[type="number"] {
   overflow: hidden;
   border-radius: 999px;
   background: #dbeafe;
+  background: color-mix(in srgb, var(--project-color, var(--blue)) 16%, white);
 }
 
 .progress-bar div {
   width: 0;
   height: 100%;
-  background: var(--blue);
+  background: var(--project-color, var(--blue));
   transition: width 160ms ease;
 }
 
@@ -292,9 +306,36 @@ input[type="number"] {
   padding: 7px 10px;
 }
 
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.icon-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.danger-icon {
+  color: var(--red);
+  background: #fff5f5;
+  border-color: #ffd3d3;
+}
+
 .tree-title strong {
   margin-left: auto;
-  color: var(--blue);
+  color: var(--project-color, var(--blue));
 }
 
 .chevron {
@@ -304,7 +345,7 @@ input[type="number"] {
   height: 22px;
   border-radius: 999px;
   color: #fff;
-  background: var(--blue);
+  background: var(--project-color, var(--blue));
   flex: 0 0 auto;
   font-weight: 900;
 }
@@ -351,6 +392,211 @@ input[type="number"] {
   font-size: 28px;
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.stat-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.stat-card strong {
+  font-size: 22px;
+}
+
+.deadline-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.deadline-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.deadline-row strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.deadline-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.deadline-row time {
+  color: var(--blue);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.gantt-chart {
+  display: grid;
+  margin-top: 20px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.gantt-table-row {
+  display: grid;
+  min-width: max-content;
+}
+
+.gantt-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+}
+
+.gantt-task-head,
+.gantt-week-head,
+.gantt-label,
+.gantt-week-cell {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.gantt-task-head,
+.gantt-week-head {
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.gantt-task-head {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  justify-content: start;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.gantt-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  padding: 9px 12px;
+  background: #fff;
+}
+
+.task-row .gantt-label {
+  padding-left: 28px;
+  background: #f8fafc;
+}
+
+.gantt-label span,
+.gantt-label small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gantt-label strong {
+  font-size: 14px;
+}
+
+.gantt-timeline {
+  position: relative;
+  display: grid;
+  min-height: 58px;
+  grid-row: 1;
+  grid-column: 2 / -1;
+}
+
+.gantt-week-cell {
+  grid-row: 1;
+  min-height: 58px;
+  background: #fff;
+}
+
+.task-row .gantt-week-cell,
+.task-row .gantt-label {
+  background: #f8fafc;
+}
+
+.gantt-week-cell:nth-child(even) {
+  background: #f1f5fb;
+}
+
+.task-row .gantt-week-cell:nth-child(even) {
+  background: #eef3fa;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+  background: color-mix(in srgb, var(--project-color, var(--blue)) 16%, white);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--project-color, var(--blue)) 26%, transparent);
+}
+
+.gantt-bar div {
+  height: 100%;
+  background: var(--project-color, var(--blue));
+}
+
+.gantt-bar span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #101827;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gantt-missing {
+  display: inline-grid;
+  grid-row: 1;
+  place-items: center;
+  align-self: center;
+  justify-self: start;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  grid-column: 1 / -1;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: 180px 180px 1fr;
@@ -364,12 +610,40 @@ input[type="number"] {
   gap: 6px;
 }
 
+.field-group input[type="color"] {
+  width: 100%;
+  min-height: 38px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 .slider-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(48px, auto);
+  grid-template-columns: auto minmax(140px, 1fr) minmax(48px, auto);
   gap: 12px;
   align-items: center;
   min-height: 38px;
+}
+
+.stepper-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.step-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .slider-row input[type="range"] {
@@ -505,7 +779,15 @@ input[type="number"] {
     grid-template-columns: 1fr;
   }
 
+  .slider-row {
+    grid-template-columns: auto minmax(0, 1fr) minmax(42px, auto);
+  }
+
   .tree-row {
+    grid-template-columns: 1fr;
+  }
+
+  .deadline-row {
     grid-template-columns: 1fr;
   }
 

@@ -24,6 +24,16 @@
         </div>
 
         <button id="addProjectButton" class="primary-button" type="button">+ Project</button>
+        <button id="showDeadlinesButton" class="secondary-button" type="button">Deadlines</button>
+        <button id="showGanttButton" class="secondary-button" type="button">Gantt Chart</button>
+        <button id="showAboutButton" class="secondary-button" type="button">About</button>
+        <div class="sidebar-actions">
+          <button id="exportDataButton" class="secondary-button" type="button">Export Data</button>
+          <label class="secondary-button file-button">
+            Import Data
+            <input id="importDataInput" type="file" accept="application/json,.json" />
+          </label>
+        </div>
       </aside>
 
       <main class="workspace">
@@ -38,6 +48,71 @@
               <h2>Projects</h2>
             </div>
             <div id="projectList" class="tree-list"></div>
+          </section>
+        </section>
+
+        <section id="detailsView" class="form-view hidden">
+          <section class="form-panel">
+            <div class="detail-header">
+              <div>
+                <span class="eyebrow">Project Details</span>
+                <h2 id="detailsHeading">Project</h2>
+              </div>
+              <button id="closeDetailsButton" class="secondary-button" type="button">Back</button>
+            </div>
+            <div id="detailsStats" class="stats-grid"></div>
+          </section>
+        </section>
+
+        <section id="deadlinesView" class="form-view hidden">
+          <section class="form-panel">
+            <div class="detail-header">
+              <div>
+                <span class="eyebrow">Schedule</span>
+                <h2>Deadlines</h2>
+              </div>
+              <button id="closeDeadlinesButton" class="secondary-button" type="button">Back</button>
+            </div>
+            <div id="deadlineList" class="deadline-list"></div>
+          </section>
+        </section>
+
+        <section id="ganttView" class="form-view hidden">
+          <section class="form-panel">
+            <div class="detail-header">
+              <div>
+                <span class="eyebrow">Timeline</span>
+                <h2>Gantt Chart</h2>
+              </div>
+              <button id="closeGanttButton" class="secondary-button" type="button">Back</button>
+            </div>
+            <div id="ganttChart" class="gantt-chart"></div>
+          </section>
+        </section>
+
+        <section id="aboutView" class="form-view hidden">
+          <section class="form-panel">
+            <div class="detail-header">
+              <div>
+                <span class="eyebrow">About</span>
+                <h2>Project Time Manager</h2>
+              </div>
+              <button id="closeAboutButton" class="secondary-button" type="button">Back</button>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <span>Storage Status</span>
+                <strong id="storageStatus">Checking...</strong>
+              </div>
+              <div class="stat-card">
+                <span>Data Schema</span>
+                <strong id="schemaStatus">v6</strong>
+              </div>
+              <div class="stat-card">
+                <span>Projects</span>
+                <strong id="projectCountStatus">0</strong>
+              </div>
+            </div>
           </section>
         </section>
 
@@ -60,9 +135,29 @@
                 <input id="formTitle" type="text" required />
               </label>
 
-              <label id="weightGroup" class="field-group">
-                <span class="field-label">Share</span>
-                <input id="formWeight" type="number" min="0" max="100" />
+              <label class="field-group">
+                <span class="field-label">Created</span>
+                <input id="formCreatedAt" type="date" disabled />
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Start Date</span>
+                <input id="formStartDate" type="date" />
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Deadline</span>
+                <input id="formDeadline" type="date" />
+              </label>
+
+              <label id="projectColorGroup" class="field-group hidden">
+                <span class="field-label">Project Color</span>
+                <input id="formProjectColor" type="color" />
+              </label>
+
+              <label class="check-group">
+                <input id="formNoDeadline" type="checkbox" />
+                <span>No deadline</span>
               </label>
 
               <label id="doneGroup" class="check-group hidden">
@@ -73,6 +168,10 @@
               <label id="currentProgressGroup" class="field-group progress-slider-group hidden">
                 <span class="field-label">Current Progress</span>
                 <div class="slider-row">
+                  <div class="stepper-buttons" aria-label="Adjust progress">
+                    <button id="decrementProgressButton" class="step-button" type="button" title="Decrease progress">-</button>
+                    <button id="incrementProgressButton" class="step-button" type="button" title="Increase progress">+</button>
+                  </div>
                   <input id="formCurrentProgress" type="range" min="0" max="100" step="1" />
                   <strong id="formCurrentProgressText">0</strong>
                 </div>

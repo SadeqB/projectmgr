@@ -1,32 +1,66 @@
-const STORAGE_KEY = "project-time-manager-web-v2";
-const OLD_STORAGE_KEY = "project-time-manager-web-v1";
+const DATA_SCHEMA_VERSION = 7;
+const STORAGE_KEY = "project-time-manager-data";
+const LEGACY_STORAGE_KEYS = ["project-time-manager-web-v2", "project-time-manager-web-v1"];
 const SERVICE_WORKER_PATH = "service-worker.js";
+const DATA_API_PATH = "api/data";
+const PROJECT_COLORS = ["#2563eb", "#15945f", "#db6b2a", "#c026d3", "#0e7490", "#ca8a04", "#dc2626", "#4f46e5"];
 
 const state = {
   projects: [],
   openProjectIds: new Set(),
   openTaskIds: new Set(),
   openItemIds: new Set(),
+  detailsProjectId: null,
+  showingDeadlines: false,
+  showingGantt: false,
+  showingAbout: false,
   form: null,
+  serverStorageAvailable: false,
   recorder: null,
   recordingChunks: [],
 };
 
 const els = {
   addProjectButton: document.querySelector("#addProjectButton"),
+  showDeadlinesButton: document.querySelector("#showDeadlinesButton"),
+  showGanttButton: document.querySelector("#showGanttButton"),
+  showAboutButton: document.querySelector("#showAboutButton"),
+  storageStatus: document.querySelector("#storageStatus"),
+  schemaStatus: document.querySelector("#schemaStatus"),
+  projectCountStatus: document.querySelector("#projectCountStatus"),
+  exportDataButton: document.querySelector("#exportDataButton"),
+  importDataInput: document.querySelector("#importDataInput"),
   emptyState: document.querySelector("#emptyState"),
   listView: document.querySelector("#listView"),
   projectList: document.querySelector("#projectList"),
+  detailsView: document.querySelector("#detailsView"),
+  detailsHeading: document.querySelector("#detailsHeading"),
+  detailsStats: document.querySelector("#detailsStats"),
+  closeDetailsButton: document.querySelector("#closeDetailsButton"),
+  deadlinesView: document.querySelector("#deadlinesView"),
+  deadlineList: document.querySelector("#deadlineList"),
+  closeDeadlinesButton: document.querySelector("#closeDeadlinesButton"),
+  ganttView: document.querySelector("#ganttView"),
+  ganttChart: document.querySelector("#ganttChart"),
+  closeGanttButton: document.querySelector("#closeGanttButton"),
+  aboutView: document.querySelector("#aboutView"),
+  closeAboutButton: document.querySelector("#closeAboutButton"),
   formView: document.querySelector("#formView"),
   objectForm: document.querySelector("#objectForm"),
   formKind: document.querySelector("#formKind"),
   formHeading: document.querySelector("#formHeading"),
   formTitle: document.querySelector("#formTitle"),
-  weightGroup: document.querySelector("#weightGroup"),
-  formWeight: document.querySelector("#formWeight"),
+  formCreatedAt: document.querySelector("#formCreatedAt"),
+  formStartDate: document.querySelector("#formStartDate"),
+  formDeadline: document.querySelector("#formDeadline"),
+  projectColorGroup: document.querySelector("#projectColorGroup"),
+  formProjectColor: document.querySelector("#formProjectColor"),
+  formNoDeadline: document.querySelector("#formNoDeadline"),
   doneGroup: document.querySelector("#doneGroup"),
   formDone: document.querySelector("#formDone"),
   currentProgressGroup: document.querySelector("#currentProgressGroup"),
+  decrementProgressButton: document.querySelector("#decrementProgressButton"),
+  incrementProgressButton: document.querySelector("#incrementProgressButton"),
   formCurrentProgress: document.querySelector("#formCurrentProgress"),
   formCurrentProgressText: document.querySelector("#formCurrentProgressText"),
   maxProgressGroup: document.querySelector("#maxProgressGroup"),
@@ -51,21 +85,40 @@ function blankNotes() {
   return { description: "", photos: [], voiceRecordings: [] };
 }
 
+function defaultProjectColor(index = state.projects.length) {
+  return PROJECT_COLORS[index % PROJECT_COLORS.length];
+}
+
+function normalizeProjectColor(value, fallback = defaultProjectColor()) {
+  return /^#[0-9a-f]{6}$/i.test(value || "") ? value : fallback;
+}
+
 function newProject() {
-  return { id: id(), title: `Project ${state.projects.length + 1}`, notes: blankNotes(), tasks: [] };
+  const createdAt = nowISO();
+  return {
+    id: id(),
+    title: `Project ${state.projects.length + 1}`,
+    color: defaultProjectColor(),
+    createdAt,
+    startDate: dateInputValue(createdAt),
+    deadline: "",
+    notes: blankNotes(),
+    tasks: [],
+  };
 }
 
 function newTask(project) {
-  const weights = normalizedWeights(project.tasks.length + 1);
-  return { id: id(), title: `Task ${project.tasks.length + 1}`, weight: weights[weights.length - 1], notes: blankNotes(), items: [] };
+  const createdAt = nowISO();
+  return { id: id(), title: `Task ${project.tasks.length + 1}`, createdAt, startDate: dateInputValue(createdAt), deadline: "", notes: blankNotes(), items: [] };
 }
 
 function newItem(task) {
-  const weights = normalizedWeights(task.items.length + 1);
   return {
     id: id(),
     title: `Item ${task.items.length + 1}`,
-    weight: weights[weights.length - 1],
+    createdAt: nowISO(),
+    startDate: dateInputValue(nowISO()),
+    deadline: "",
     isDone: false,
     currentProgress: 0,
     maxProgress: 100,
@@ -79,27 +132,90 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function load() {
-  const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(OLD_STORAGE_KEY);
+function nowISO() {
+  return new Date().toISOString();
+}
+
+async function load() {
+  const saved = localStorage.getItem(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
+  let localProjects = [];
+
   try {
-    state.projects = migrateProjects(JSON.parse(saved) || []);
+    localProjects = readDataDocument(JSON.parse(saved));
+  } catch {
+    localProjects = [];
+  }
+
+  let loadedFromServer = false;
+
+  try {
+    const response = await fetch(DATA_API_PATH, { cache: "no-store" });
+    if (response.ok) {
+      const document = await response.json();
+      const serverProjects = readDataDocument(document);
+      state.serverStorageAvailable = true;
+      state.projects = serverProjects.length === 0 && localProjects.length > 0 ? localProjects : serverProjects;
+      loadedFromServer = true;
+      if (serverProjects.length === 0 && localProjects.length > 0) {
+        await save();
+      }
+    }
+  } catch {
+    state.serverStorageAvailable = false;
+  }
+
+  if (loadedFromServer) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(createDataDocument()));
+    return;
+  }
+
+  state.projects = localProjects;
+  await save();
+}
+
+async function refreshProjectsFromStorage() {
+  try {
+    const response = await fetch(DATA_API_PATH, { cache: "no-store" });
+    if (response.ok) {
+      state.projects = readDataDocument(await response.json());
+      state.serverStorageAvailable = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(createDataDocument()));
+      return;
+    }
+  } catch {
+    state.serverStorageAvailable = false;
+  }
+
+  const saved = localStorage.getItem(STORAGE_KEY) || LEGACY_STORAGE_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
+  try {
+    state.projects = readDataDocument(JSON.parse(saved));
   } catch {
     state.projects = [];
   }
-  save();
+}
+
+function readDataDocument(document) {
+  if (!document) return [];
+  if (Array.isArray(document)) return migrateProjects(document);
+  if (document.app !== "ProjectTimeManager") return [];
+  return migrateProjects(document.projects || []);
 }
 
 function migrateProjects(projects) {
-  return projects.map((project) => {
+  return projects.map((project, index) => {
     if (Array.isArray(project.tasks)) {
+      ensureScheduleFields(project);
+      project.color = normalizeProjectColor(project.color, defaultProjectColor(index));
       project.notes = project.notes || blankNotes();
       project.tasks.forEach((task) => {
+        ensureScheduleFields(task);
         task.notes = task.notes || blankNotes();
         task.items = task.items || [];
-        task.items.forEach(ensureItemProgress);
-        normalize(task.items);
+        task.items.forEach((item) => {
+          ensureScheduleFields(item);
+          ensureItemProgress(item);
+        });
       });
-      normalize(project.tasks);
       return project;
     }
 
@@ -110,6 +226,8 @@ function migrateProjects(projects) {
           ...task,
           id: task.id || id(),
           title: task.title || "Task",
+          createdAt: task.createdAt || subproject.createdAt || nowISO(),
+          deadline: task.deadline || subproject.deadline || "",
           notes: task.notes || blankNotes(),
           items: task.items || [],
         });
@@ -118,16 +236,27 @@ function migrateProjects(projects) {
     const migrated = {
       id: project.id || id(),
       title: project.title || "Project",
+      color: normalizeProjectColor(project.color, defaultProjectColor(index)),
+      createdAt: project.createdAt || nowISO(),
+      deadline: project.deadline || "",
       notes: project.notes || blankNotes(),
       tasks,
     };
     migrated.tasks.forEach((task) => {
-      task.items.forEach(ensureItemProgress);
-      normalize(task.items);
+      ensureScheduleFields(task);
+      task.items.forEach((item) => {
+        ensureScheduleFields(item);
+        ensureItemProgress(item);
+      });
     });
-    normalize(migrated.tasks);
     return migrated;
   });
+}
+
+function ensureScheduleFields(entry) {
+  entry.createdAt = entry.createdAt || nowISO();
+  entry.startDate = entry.startDate || dateInputValue(entry.createdAt);
+  entry.deadline = entry.deadline || "";
 }
 
 function ensureItemProgress(item) {
@@ -140,52 +269,63 @@ function ensureItemProgress(item) {
   item.isDone = item.currentProgress >= item.maxProgress;
 }
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.projects));
-}
+async function save() {
+  const document = createDataDocument();
+  const serialized = JSON.stringify(document);
+  localStorage.setItem(STORAGE_KEY, serialized);
 
-function normalizedWeights(count, total = 100) {
-  if (!count) return [];
-  const base = Math.floor(total / count);
-  const remainder = total % count;
-  return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
-}
-
-function normalize(collection) {
-  const weights = normalizedWeights(collection.length);
-  collection.forEach((entry, index) => {
-    entry.weight = weights[index];
-  });
-}
-
-function setWeight(collection, index, value) {
-  if (index < 0) return;
-  if (collection.length === 1) {
-    collection[index].weight = 100;
-    return;
-  }
-
-  const clamped = Math.max(0, Math.min(100, Number(value) || 0));
-  collection[index].weight = clamped;
-  const others = collection.map((_, otherIndex) => otherIndex).filter((otherIndex) => otherIndex !== index);
-  const otherTotal = others.reduce((sum, otherIndex) => sum + collection[otherIndex].weight, 0);
-  const remaining = 100 - clamped;
-
-  if (!otherTotal) {
-    const weights = normalizedWeights(others.length, remaining);
-    others.forEach((otherIndex, offset) => {
-      collection[otherIndex].weight = weights[offset];
+  try {
+    const response = await fetch(DATA_API_PATH, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: serialized,
     });
-    return;
+    state.serverStorageAvailable = response.ok;
+  } catch {
+    state.serverStorageAvailable = false;
   }
+}
 
-  let used = 0;
-  others.slice(0, -1).forEach((otherIndex) => {
-    const scaled = Math.round((collection[otherIndex].weight * remaining) / otherTotal);
-    collection[otherIndex].weight = Math.max(0, Math.min(100, scaled));
-    used += collection[otherIndex].weight;
-  });
-  collection[others[others.length - 1]].weight = Math.max(0, Math.min(100, remaining - used));
+function createDataDocument() {
+  return {
+    app: "ProjectTimeManager",
+    schemaVersion: DATA_SCHEMA_VERSION,
+    savedAt: new Date().toISOString(),
+    projects: serializeProjects(state.projects),
+  };
+}
+
+function serializeProjects(projects) {
+  return projects.map((project) => ({
+    id: project.id,
+    title: project.title,
+    color: normalizeProjectColor(project.color),
+    createdAt: project.createdAt,
+    startDate: project.startDate || dateInputValue(project.createdAt),
+    deadline: project.deadline || "",
+    notes: project.notes,
+    tasks: (project.tasks || []).map((task) => ({
+      id: task.id,
+      title: task.title,
+      createdAt: task.createdAt,
+      startDate: task.startDate || dateInputValue(task.createdAt),
+      deadline: task.deadline || "",
+      notes: task.notes,
+      items: (task.items || []).map((item) => ({
+        id: item.id,
+        title: item.title,
+        createdAt: item.createdAt,
+        startDate: item.startDate || dateInputValue(item.createdAt),
+        deadline: item.deadline || "",
+        isDone: item.isDone,
+        currentProgress: item.currentProgress,
+        maxProgress: item.maxProgress,
+        notes: item.notes,
+        elapsedSeconds: item.elapsedSeconds,
+        timerStartedAt: item.timerStartedAt,
+      })),
+    })),
+  }));
 }
 
 function itemElapsed(item) {
@@ -194,8 +334,7 @@ function itemElapsed(item) {
 }
 
 function itemProgress(item) {
-  const ratio = itemProgressRatio(item);
-  return item.weight * ratio;
+  return itemProgressRatio(item) * 100;
 }
 
 function itemProgressRatio(item) {
@@ -205,11 +344,13 @@ function itemProgressRatio(item) {
 }
 
 function taskProgress(task) {
-  return task.items.reduce((sum, item) => sum + itemProgress(item), 0);
+  if (!task.items.length) return 0;
+  return task.items.reduce((sum, item) => sum + itemProgress(item), 0) / task.items.length;
 }
 
 function projectProgress(project) {
-  return project.tasks.reduce((sum, task) => sum + (task.weight * taskProgress(task)) / 100, 0);
+  if (!project.tasks.length) return 0;
+  return project.tasks.reduce((sum, task) => sum + taskProgress(task), 0) / project.tasks.length;
 }
 
 function formatTime(seconds) {
@@ -226,12 +367,71 @@ function formatProgressCount(item) {
   return `${currentProgress}/${maxProgress}`;
 }
 
+function dateInputValue(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function formatDate(value, fallback = "No date") {
+  if (!value) return fallback;
+  const date = new Date(String(value).length === 10 ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
+
+function dateValue(value) {
+  const date = new Date(String(value).length === 10 ? `${value}T00:00:00` : value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysBetween(start, end) {
+  return Math.max(0, Math.round((end - start) / 86_400_000));
+}
+
+function rawDaysBetween(start, end) {
+  return Math.round((end - start) / 86_400_000);
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(date) {
+  const next = new Date(date);
+  const day = next.getDay() || 7;
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() - day + 1);
+  return next;
+}
+
+function weekLabel(date) {
+  return `${date.toLocaleDateString(undefined, { month: "short" })} ${date.getDate()}`;
+}
+
 function render() {
-  els.emptyState.classList.toggle("hidden", state.projects.length > 0 || state.form);
-  els.listView.classList.toggle("hidden", state.projects.length === 0 || state.form);
+  const hasProjects = state.projects.length > 0;
+  const showingSecondaryPage = Boolean(state.form || state.detailsProjectId || state.showingDeadlines || state.showingGantt || state.showingAbout);
+  els.emptyState.classList.toggle("hidden", hasProjects || showingSecondaryPage);
+  els.listView.classList.toggle("hidden", !hasProjects || showingSecondaryPage);
   els.formView.classList.toggle("hidden", !state.form);
+  els.detailsView.classList.toggle("hidden", !state.detailsProjectId);
+  els.deadlinesView.classList.toggle("hidden", !state.showingDeadlines);
+  els.ganttView.classList.toggle("hidden", !state.showingGantt);
+  els.aboutView.classList.toggle("hidden", !state.showingAbout);
   renderProjects();
+  renderAboutStatus();
   if (state.form) renderForm();
+  if (state.detailsProjectId) renderDetails();
+  if (state.showingDeadlines) renderDeadlines();
+  if (state.showingGantt) renderGantt();
+}
+
+function renderAboutStatus() {
+  els.storageStatus.textContent = state.serverStorageAvailable ? "data.json" : "Browser only";
+  els.schemaStatus.textContent = `v${DATA_SCHEMA_VERSION}`;
+  els.projectCountStatus.textContent = String(state.projects.length);
 }
 
 function renderProjects() {
@@ -251,10 +451,12 @@ function projectNode(project) {
     progress: projectProgress(project),
     open: isOpen,
     depth: 0,
+    color: project.color,
     actions: [
       { label: "+ Task", className: "secondary-button", onClick: () => openForm("task", "create", { projectId: project.id }) },
-      { label: "Edit", className: "secondary-button", onClick: () => openForm("project", "edit", { projectId: project.id }) },
-      { label: "Delete", className: "danger-button", onClick: () => deleteProject(project.id) },
+      { label: "Details", icon: "info", className: "icon-action", onClick: () => openDetails(project.id) },
+      { label: "Edit", icon: "edit", className: "icon-action", onClick: () => openForm("project", "edit", { projectId: project.id }) },
+      { label: "Delete", icon: "delete", className: "icon-action danger-icon", onClick: () => deleteProject(project.id) },
     ],
     onClick: () => toggleSet(state.openProjectIds, project.id),
   }));
@@ -276,14 +478,15 @@ function taskNode(project, task) {
   const isOpen = state.openTaskIds.has(task.id);
   wrapper.append(treeButton({
     title: task.title,
-    meta: `${task.weight}% share | ${task.items.length} items`,
+    meta: `${task.items.length} items | equal share`,
     progress: taskProgress(task),
     open: isOpen,
     depth: 1,
+    color: project.color,
     actions: [
       { label: "+ Item", className: "secondary-button", onClick: () => openForm("item", "create", { projectId: project.id, taskId: task.id }) },
-      { label: "Edit", className: "secondary-button", onClick: () => openForm("task", "edit", { projectId: project.id, taskId: task.id }) },
-      { label: "Delete", className: "danger-button", onClick: () => deleteTask(project.id, task.id) },
+      { label: "Edit", icon: "edit", className: "icon-action", onClick: () => openForm("task", "edit", { projectId: project.id, taskId: task.id }) },
+      { label: "Delete", icon: "delete", className: "icon-action danger-icon", onClick: () => deleteTask(project.id, task.id) },
     ],
     onClick: () => toggleSet(state.openTaskIds, task.id),
   }));
@@ -305,13 +508,14 @@ function itemNode(project, task, item) {
   const isOpen = state.openItemIds.has(item.id);
   wrapper.append(treeButton({
     title: `${item.isDone ? "Done: " : ""}${item.title}`,
-    meta: `${item.weight}% share | ${formatProgressCount(item)} | ${formatTime(itemElapsed(item))}`,
+    meta: `${formatProgressCount(item)} | equal share | ${formatTime(itemElapsed(item))}`,
     progress: itemProgressRatio(item) * 100,
     open: isOpen,
     depth: 2,
+    color: project.color,
     actions: [
-      { label: "Edit", className: "secondary-button", onClick: () => openForm("item", "edit", { projectId: project.id, taskId: task.id, itemId: item.id }) },
-      { label: "Delete", className: "danger-button", onClick: () => deleteItem(project.id, task.id, item.id) },
+      { label: "Edit", icon: "edit", className: "icon-action", onClick: () => openForm("item", "edit", { projectId: project.id, taskId: task.id, itemId: item.id }) },
+      { label: "Delete", icon: "delete", className: "icon-action danger-icon", onClick: () => deleteItem(project.id, task.id, item.id) },
     ],
     onClick: () => toggleSet(state.openItemIds, item.id),
   }));
@@ -326,9 +530,10 @@ function itemNode(project, task, item) {
   return wrapper;
 }
 
-function treeButton({ title, meta, progress, open, depth, actions, onClick }) {
+function treeButton({ title, meta, progress, open, depth, color, actions, onClick }) {
   const row = document.createElement("div");
   row.className = `tree-row depth-${depth}`;
+  row.style.setProperty("--project-color", normalizeProjectColor(color));
 
   const button = document.createElement("button");
   button.type = "button";
@@ -348,7 +553,10 @@ function treeButton({ title, meta, progress, open, depth, actions, onClick }) {
     const actionButton = document.createElement("button");
     actionButton.type = "button";
     actionButton.className = action.className;
-    actionButton.textContent = action.label;
+    actionButton.title = action.label;
+    actionButton.setAttribute("aria-label", action.label);
+    actionButton.innerHTML = action.icon ? iconMarkup(action.icon) : "";
+    if (!action.icon) actionButton.textContent = action.label;
     actionButton.addEventListener("click", (event) => {
       event.stopPropagation();
       action.onClick();
@@ -358,6 +566,220 @@ function treeButton({ title, meta, progress, open, depth, actions, onClick }) {
 
   row.append(button, actionBar);
   return row;
+}
+
+function iconMarkup(name) {
+  const icons = {
+    info: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="10" x2="12" y2="16"></line><line x1="12" y1="7" x2="12.01" y2="7"></line></svg>`,
+    edit: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>`,
+    delete: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v5"></path><path d="M14 11v5"></path></svg>`,
+  };
+  return icons[name] || "";
+}
+
+async function openDetails(projectId) {
+  await refreshProjectsFromStorage();
+  state.detailsProjectId = projectId;
+  state.form = null;
+  state.showingDeadlines = false;
+  state.showingGantt = false;
+  state.showingAbout = false;
+  render();
+}
+
+function renderDetails() {
+  const project = findProject(state.detailsProjectId);
+  if (!project) {
+    state.detailsProjectId = null;
+    render();
+    return;
+  }
+
+  const stats = projectStats(project);
+  els.detailsHeading.textContent = project.title;
+  els.detailsStats.innerHTML = "";
+  [
+    ["Created", formatDate(project.createdAt, "No creation date")],
+    ["Start Date", formatDate(project.startDate || project.createdAt, "No start date")],
+    ["Deadline", formatDate(project.deadline, "No deadline")],
+    ["Tasks", stats.taskCount],
+    ["Items", stats.itemCount],
+    ["Total Item Time", formatTime(stats.totalSeconds)],
+    ["Progress", `${Math.round(projectProgress(project))}%`],
+  ].forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = `<span></span><strong></strong>`;
+    card.querySelector("span").textContent = label;
+    card.querySelector("strong").textContent = value;
+    els.detailsStats.append(card);
+  });
+}
+
+function projectStats(project) {
+  let itemCount = 0;
+  let totalSeconds = 0;
+  project.tasks.forEach((task) => {
+    itemCount += task.items.length;
+    totalSeconds += task.items.reduce((sum, item) => sum + itemElapsed(item), 0);
+  });
+  return { taskCount: project.tasks.length, itemCount, totalSeconds };
+}
+
+function renderDeadlines() {
+  const deadlines = collectDeadlines();
+  els.deadlineList.innerHTML = "";
+
+  if (!deadlines.length) {
+    els.deadlineList.append(emptyLine("No deadlines defined."));
+    return;
+  }
+
+  deadlines.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "deadline-row";
+    row.innerHTML = `
+      <div>
+        <span class="eyebrow"></span>
+        <strong></strong>
+        <p></p>
+      </div>
+      <time></time>
+    `;
+    row.querySelector(".eyebrow").textContent = entry.kind;
+    row.querySelector("strong").textContent = entry.title;
+    row.querySelector("p").textContent = entry.path;
+    row.querySelector("time").textContent = formatDate(entry.deadline, "No deadline");
+    els.deadlineList.append(row);
+  });
+}
+
+function renderGantt() {
+  const rows = collectGanttRows();
+  const scheduledRows = rows.filter((row) => row.start && row.end);
+  els.ganttChart.innerHTML = "";
+
+  if (!rows.length) {
+    els.ganttChart.append(emptyLine("No projects or tasks to show."));
+    return;
+  }
+
+  if (!scheduledRows.length) {
+    els.ganttChart.append(emptyLine("Add start dates and deadlines to projects or tasks to show timeline bars."));
+    return;
+  }
+
+  const minDate = startOfWeek(new Date(Math.min(...scheduledRows.map((row) => row.start.getTime()))));
+  const maxDate = startOfWeek(new Date(Math.max(...scheduledRows.map((row) => row.end.getTime()))));
+  const weekCount = Math.max(1, Math.floor(daysBetween(minDate, maxDate) / 7) + 1);
+  const totalTimelineDays = weekCount * 7;
+  const weekColumns = `220px repeat(${weekCount}, minmax(74px, 1fr))`;
+
+  const header = document.createElement("div");
+  header.className = "gantt-table-row gantt-header";
+  header.style.gridTemplateColumns = weekColumns;
+  const labelHead = document.createElement("div");
+  labelHead.className = "gantt-task-head";
+  labelHead.textContent = "Project / Task";
+  header.append(labelHead);
+  for (let index = 0; index < weekCount; index += 1) {
+    const cell = document.createElement("div");
+    cell.className = "gantt-week-head";
+    cell.textContent = weekLabel(addDays(minDate, index * 7));
+    header.append(cell);
+  }
+  els.ganttChart.append(header);
+
+  rows.forEach((row) => {
+    const line = document.createElement("div");
+    line.className = `gantt-table-row ${row.kind.toLowerCase()}-row`;
+    line.style.gridTemplateColumns = weekColumns;
+
+    const label = document.createElement("div");
+    label.className = "gantt-label";
+    label.innerHTML = `<span></span><strong></strong><small></small>`;
+    label.querySelector("span").textContent = row.kind;
+    label.querySelector("strong").textContent = row.title;
+    label.querySelector("small").textContent = row.end ? `${formatDate(row.start)} - ${formatDate(row.end)}` : "No deadline";
+
+    const timeline = document.createElement("div");
+    timeline.className = "gantt-timeline";
+    timeline.style.gridColumn = `2 / span ${weekCount}`;
+    timeline.style.gridTemplateColumns = `repeat(${weekCount}, minmax(74px, 1fr))`;
+
+    for (let index = 0; index < weekCount; index += 1) {
+      const cell = document.createElement("div");
+      cell.className = "gantt-week-cell";
+      timeline.append(cell);
+    }
+
+    if (row.start && row.end) {
+      const startOffset = Math.max(0, rawDaysBetween(minDate, row.start));
+      const endOffset = Math.min(totalTimelineDays, rawDaysBetween(minDate, row.end) + 1);
+      const left = Math.min(100, (startOffset / totalTimelineDays) * 100);
+      const width = Math.max(0.8, ((Math.max(endOffset, startOffset + 1) - startOffset) / totalTimelineDays) * 100);
+      const bar = document.createElement("div");
+      bar.className = "gantt-bar";
+      bar.style.setProperty("--project-color", normalizeProjectColor(row.color));
+      bar.style.left = `${left}%`;
+      bar.style.width = `${Math.min(100 - left, width)}%`;
+      bar.innerHTML = `<div style="width: ${row.progress}%"></div><span>${Math.round(row.progress)}%</span>`;
+      timeline.append(bar);
+    } else {
+      const missing = document.createElement("span");
+      missing.className = "gantt-missing";
+      missing.textContent = "No deadline";
+      timeline.append(missing);
+    }
+
+    line.append(label, timeline);
+    els.ganttChart.append(line);
+  });
+}
+
+function collectGanttRows() {
+  const rows = [];
+  state.projects.forEach((project) => {
+    rows.push({
+      kind: "Project",
+      title: project.title,
+      start: dateValue(project.startDate || project.createdAt),
+      end: dateValue(project.deadline),
+      progress: projectProgress(project),
+      color: project.color,
+    });
+    project.tasks.forEach((task) => {
+      rows.push({
+        kind: "Task",
+        title: task.title,
+        start: dateValue(task.startDate || task.createdAt),
+        end: dateValue(task.deadline),
+        progress: taskProgress(task),
+        color: project.color,
+      });
+    });
+  });
+  return rows;
+}
+
+function collectDeadlines() {
+  const entries = [];
+  state.projects.forEach((project) => {
+    if (project.deadline) {
+      entries.push({ kind: "Project", title: project.title, path: project.title, deadline: project.deadline });
+    }
+    project.tasks.forEach((task) => {
+      if (task.deadline) {
+        entries.push({ kind: "Task", title: task.title, path: project.title, deadline: task.deadline });
+      }
+      task.items.forEach((item) => {
+        if (item.deadline) {
+          entries.push({ kind: "Item", title: item.title, path: `${project.title} / ${task.title}`, deadline: item.deadline });
+        }
+      });
+    });
+  });
+  return entries.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
 }
 
 function emptyLine(text) {
@@ -398,6 +820,10 @@ function openForm(kind, mode, ids = {}) {
   const existing = mode === "edit" ? findExisting(kind, ids) : null;
   let draft = existing ? clone(existing) : newDraft(kind, ids);
   state.form = { kind, mode, ids, draft };
+  state.detailsProjectId = null;
+  state.showingDeadlines = false;
+  state.showingGantt = false;
+  state.showingAbout = false;
   render();
 }
 
@@ -421,8 +847,13 @@ function renderForm() {
   els.formKind.textContent = kind[0].toUpperCase() + kind.slice(1);
   els.formHeading.textContent = `${mode === "create" ? "New" : "Edit"} ${els.formKind.textContent}`;
   els.formTitle.value = draft.title;
-  els.weightGroup.classList.toggle("hidden", isProject);
-  els.formWeight.value = isProject ? 100 : draft.weight;
+  els.formCreatedAt.value = dateInputValue(draft.createdAt);
+  els.formStartDate.value = dateInputValue(draft.startDate || draft.createdAt);
+  els.formDeadline.value = dateInputValue(draft.deadline);
+  els.projectColorGroup.classList.toggle("hidden", !isProject);
+  els.formProjectColor.value = normalizeProjectColor(draft.color);
+  els.formNoDeadline.checked = !draft.deadline;
+  updateDeadlineControl();
   els.doneGroup.classList.toggle("hidden", !isItem);
   els.currentProgressGroup.classList.toggle("hidden", !isItem);
   els.maxProgressGroup.classList.toggle("hidden", !isItem);
@@ -445,7 +876,12 @@ function syncFormDraft() {
   if (!state.form) return;
   const { draft, kind } = state.form;
   draft.title = els.formTitle.value.trim() || "Untitled";
-  if (kind !== "project") draft.weight = Math.max(0, Math.min(100, Number(els.formWeight.value) || 0));
+  draft.createdAt = draft.createdAt || nowISO();
+  draft.startDate = els.formStartDate.value || dateInputValue(draft.createdAt);
+  draft.deadline = els.formNoDeadline.checked ? "" : (els.formDeadline.value || "");
+  if (kind === "project") {
+    draft.color = normalizeProjectColor(els.formProjectColor.value, draft.color || defaultProjectColor());
+  }
   if (kind === "item") {
     draft.maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
     draft.currentProgress = Math.max(0, Math.min(draft.maxProgress, Number(els.formCurrentProgress.value) || 0));
@@ -460,14 +896,33 @@ function closeForm() {
   render();
 }
 
-function commitForm() {
+function closeDetails() {
+  state.detailsProjectId = null;
+  render();
+}
+
+function closeDeadlines() {
+  state.showingDeadlines = false;
+  render();
+}
+
+function closeGantt() {
+  state.showingGantt = false;
+  render();
+}
+
+function closeAbout() {
+  state.showingAbout = false;
+  render();
+}
+
+async function commitForm() {
   syncFormDraft();
   const { kind, mode, ids, draft } = state.form;
 
   if (mode === "create") {
     const collection = findCollection(kind, ids);
     collection.push(draft);
-    if (kind !== "project") setWeight(collection, collection.length - 1, draft.weight);
     if (kind === "project") state.openProjectIds.add(draft.id);
     if (kind === "task") {
       state.openProjectIds.add(ids.projectId);
@@ -483,41 +938,38 @@ function commitForm() {
     const index = collection.findIndex((entry) => entry.id === draft.id);
     if (index >= 0) {
       collection[index] = draft;
-      if (kind !== "project") setWeight(collection, index, draft.weight);
     }
   }
 
-  save();
+  await save();
   closeForm();
 }
 
-function deleteProject(projectId) {
+async function deleteProject(projectId) {
   if (!confirm("Remove this project and all its tasks and items?")) return;
   state.projects = state.projects.filter((project) => project.id !== projectId);
   state.openProjectIds.delete(projectId);
-  save();
+  await save();
   render();
 }
 
-function deleteTask(projectId, taskId) {
+async function deleteTask(projectId, taskId) {
   if (!confirm("Remove this task and all its items?")) return;
   const project = findProject(projectId);
   if (!project) return;
   project.tasks = project.tasks.filter((task) => task.id !== taskId);
-  normalize(project.tasks);
   state.openTaskIds.delete(taskId);
-  save();
+  await save();
   render();
 }
 
-function deleteItem(projectId, taskId, itemId) {
+async function deleteItem(projectId, taskId, itemId) {
   if (!confirm("Remove this item?")) return;
   const task = findTask(projectId, taskId);
   if (!task) return;
   task.items = task.items.filter((item) => item.id !== itemId);
-  normalize(task.items);
   state.openItemIds.delete(itemId);
-  save();
+  await save();
   render();
 }
 
@@ -581,6 +1033,84 @@ function selectedNotes() {
 
 els.addProjectButton.addEventListener("click", () => openForm("project", "create"));
 
+els.showDeadlinesButton.addEventListener("click", async () => {
+  await refreshProjectsFromStorage();
+  state.showingDeadlines = true;
+  state.detailsProjectId = null;
+  state.showingGantt = false;
+  state.showingAbout = false;
+  state.form = null;
+  render();
+});
+
+els.showGanttButton.addEventListener("click", async () => {
+  await refreshProjectsFromStorage();
+  state.showingGantt = true;
+  state.showingDeadlines = false;
+  state.detailsProjectId = null;
+  state.showingAbout = false;
+  state.form = null;
+  render();
+});
+
+els.showAboutButton.addEventListener("click", async () => {
+  await refreshProjectsFromStorage();
+  state.showingAbout = true;
+  state.showingGantt = false;
+  state.showingDeadlines = false;
+  state.detailsProjectId = null;
+  state.form = null;
+  render();
+});
+
+els.closeDetailsButton.addEventListener("click", closeDetails);
+
+els.closeDeadlinesButton.addEventListener("click", closeDeadlines);
+
+els.closeGanttButton.addEventListener("click", closeGantt);
+
+els.closeAboutButton.addEventListener("click", closeAbout);
+
+els.formNoDeadline.addEventListener("change", updateDeadlineControl);
+
+els.formDeadline.addEventListener("input", () => {
+  els.formNoDeadline.checked = !els.formDeadline.value;
+  updateDeadlineControl();
+});
+
+els.exportDataButton.addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(createDataDocument(), null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `project-time-manager-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+});
+
+els.importDataInput.addEventListener("change", async () => {
+  const file = els.importDataInput.files?.[0];
+  if (!file) return;
+
+  try {
+    const document = JSON.parse(await file.text());
+    const importedProjects = readDataDocument(document);
+    if (!confirm("Importing will replace the current local data. Continue?")) return;
+    state.projects = importedProjects;
+    state.openProjectIds.clear();
+    state.openTaskIds.clear();
+    state.openItemIds.clear();
+    await save();
+    render();
+  } catch {
+    alert("Could not import this JSON file.");
+  } finally {
+    els.importDataInput.value = "";
+  }
+});
+
 els.objectForm.addEventListener("submit", (event) => {
   event.preventDefault();
   commitForm();
@@ -607,6 +1137,10 @@ els.formCurrentProgress.addEventListener("input", () => {
   els.formCurrentProgressText.textContent = String(currentProgress);
   els.formDone.checked = currentProgress >= maxProgress;
 });
+
+els.decrementProgressButton.addEventListener("click", () => adjustProgress(-1));
+
+els.incrementProgressButton.addEventListener("click", () => adjustProgress(1));
 
 els.startStopTimerButton.addEventListener("click", () => {
   if (!state.form || state.form.kind !== "item") return;
@@ -694,6 +1228,20 @@ function updateProgressSlider(currentProgress, maxProgress) {
   els.formDone.checked = safeCurrent >= safeMax;
 }
 
+function updateDeadlineControl() {
+  els.formDeadline.disabled = els.formNoDeadline.checked;
+  if (els.formNoDeadline.checked) {
+    els.formDeadline.value = "";
+  }
+}
+
+function adjustProgress(delta) {
+  if (!state.form || state.form.kind !== "item") return;
+  const maxProgress = Math.max(1, Number(els.formMaxProgress.value) || 1);
+  const currentProgress = Number(els.formCurrentProgress.value) || 0;
+  updateProgressSlider(currentProgress + delta, maxProgress);
+}
+
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -725,5 +1273,4 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-load();
-render();
+load().then(render);
