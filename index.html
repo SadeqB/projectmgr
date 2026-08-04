@@ -30,9 +30,11 @@
         </div>
 
         <button id="addProjectButton" class="primary-button" type="button">+ Project</button>
+        <button id="showTodayButton" class="secondary-button" type="button">Today</button>
         <button id="showDeadlinesButton" class="secondary-button" type="button">Deadlines</button>
         <button id="showGanttButton" class="secondary-button" type="button">Gantt Chart</button>
         <button id="showAboutButton" class="secondary-button" type="button">About</button>
+        <button id="refreshButton" class="secondary-button" type="button">Refresh</button>
         <div class="sidebar-actions">
           <button id="exportDataButton" class="secondary-button" type="button">Export Data</button>
           <label class="secondary-button file-button">
@@ -52,8 +54,26 @@
           <section class="panel">
             <div class="panel-header">
               <h2>Projects</h2>
+              <button id="quickAddButton" class="icon-button" type="button" title="Add project" aria-label="Add project">+</button>
+            </div>
+            <div class="list-tools">
+              <label class="search-field"><span class="sr-only">Search</span><input id="searchInput" type="search" placeholder="Search projects, tasks, and items" /></label>
+              <select id="statusFilter" aria-label="Filter by status"><option value="all">All statuses</option><option value="planned">Planned</option><option value="in-progress">In progress</option><option value="blocked">Blocked</option><option value="completed">Completed</option><option value="archived">Archived</option></select>
+              <select id="priorityFilter" aria-label="Filter by priority"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select>
+              <select id="sortSelect" aria-label="Sort projects"><option value="manual">Order added</option><option value="deadline">Deadline</option><option value="progress">Progress</option><option value="title">Title</option><option value="updated">Recently changed</option></select>
             </div>
             <div id="projectList" class="tree-list"></div>
+          </section>
+        </section>
+
+        <section id="todayView" class="form-view hidden">
+          <section class="form-panel">
+            <div class="detail-header">
+              <div><span class="eyebrow">Focus</span><h2>Today</h2></div>
+              <button id="closeTodayButton" class="secondary-button" type="button">Back</button>
+            </div>
+            <div id="todayStats" class="stats-grid"></div>
+            <div id="todayList" class="today-list"></div>
           </section>
         </section>
 
@@ -112,12 +132,18 @@
               </div>
               <div class="stat-card">
                 <span>Data Schema</span>
-                <strong id="schemaStatus">v6</strong>
+                <strong id="schemaStatus">v8</strong>
               </div>
               <div class="stat-card">
                 <span>Projects</span>
                 <strong id="projectCountStatus">0</strong>
               </div>
+              <div class="stat-card"><span>Tracked Time</span><strong id="totalTimeStatus">0:00:00</strong></div>
+              <div class="stat-card"><span>Open Timers</span><strong id="runningTimerStatus">0</strong></div>
+            </div>
+            <div class="about-actions button-row">
+              <button id="enableNotificationsButton" class="secondary-button" type="button">Enable reminders</button>
+              <button id="largeTextButton" class="secondary-button" type="button">Larger text</button>
             </div>
           </section>
         </section>
@@ -139,6 +165,31 @@
               <label class="field-group">
                 <span class="field-label">Name</span>
                 <input id="formTitle" type="text" required />
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Status</span>
+                <select id="formStatus"><option value="planned">Planned</option><option value="in-progress">In progress</option><option value="blocked">Blocked</option><option value="completed">Completed</option><option value="archived">Archived</option></select>
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Priority</span>
+                <select id="formPriority"><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select>
+              </label>
+
+              <label id="dependencyGroup" class="field-group hidden">
+                <span class="field-label">Depends on</span>
+                <select id="formDependency"><option value="">No dependency</option></select>
+              </label>
+
+              <label class="field-group wide-field">
+                <span class="field-label">Tags</span>
+                <input id="formTags" type="text" placeholder="planning, client, research" />
+              </label>
+
+              <label id="recurrenceGroup" class="field-group hidden">
+                <span class="field-label">Repeat</span>
+                <select id="formRecurrence"><option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
               </label>
 
               <label class="field-group">
@@ -194,8 +245,12 @@
                   <button id="startStopTimerButton" class="primary-button" type="button">Start</button>
                   <button id="resetTimerButton" class="secondary-button" type="button">Reset</button>
                 </div>
+                <div class="manual-time-row"><input id="manualMinutesInput" type="number" min="1" placeholder="Minutes" aria-label="Manual minutes" /><button id="addManualTimeButton" class="secondary-button" type="button">Add time</button></div>
               </div>
             </div>
+
+            <p id="formValidation" class="form-validation" role="alert"></p>
+            <div id="timeSessionList" class="time-session-list"></div>
 
             <label class="field-group wide">
               <span class="field-label">Description</span>
@@ -225,6 +280,20 @@
           </form>
         </section>
       </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Quick navigation">
+      <button id="mobileProjectsButton" type="button">Projects</button>
+      <button id="mobileTodayButton" type="button">Today</button>
+      <button id="mobileDeadlinesButton" type="button">Deadlines</button>
+      <button id="mobileMenuButton" type="button">More</button>
+    </nav>
+    <div id="appToast" class="app-toast" role="status" aria-live="polite" hidden></div>
+    <div id="confirmDialog" class="confirm-dialog" hidden>
+      <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmHeading">
+        <h2 id="confirmHeading">Confirm action</h2><p id="confirmMessage"></p>
+        <div class="button-row"><button id="cancelConfirmButton" class="secondary-button" type="button">Cancel</button><button id="acceptConfirmButton" class="danger-button" type="button">Delete</button></div>
+      </div>
     </div>
 
     <script src="app.js"></script>

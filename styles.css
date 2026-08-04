@@ -24,6 +24,11 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+body.large-text { font-size: 18px; }
+body.large-text .tree-meta,
+body.large-text .deadline-row p,
+body.large-text .today-row p { font-size: 15px; }
+
 button,
 input,
 textarea {
@@ -187,6 +192,27 @@ button {
   font-size: 18px;
 }
 
+.list-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(120px, auto));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.search-field input { width: 100%; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .mini-header h3 {
   font-size: 16px;
 }
@@ -194,7 +220,11 @@ button {
 .title-input,
 .detail-title,
 textarea,
-input[type="number"] {
+input[type="number"],
+input[type="text"],
+input[type="date"],
+input[type="search"],
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -216,9 +246,15 @@ input[type="number"] {
 }
 
 textarea,
-input[type="number"] {
+input[type="number"],
+input[type="text"],
+input[type="date"],
+input[type="search"],
+select {
   padding: 10px 12px;
 }
+
+select { min-height: 38px; }
 
 .field-label,
 .eyebrow {
@@ -502,6 +538,9 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+.deadline-row.overdue { border-left: 4px solid var(--red); }
+.deadline-row.overdue time { color: var(--red); }
+
 .gantt-chart {
   display: grid;
   margin-top: 20px;
@@ -568,6 +607,11 @@ input[type="number"] {
   background: #f8fafc;
 }
 
+.item-row .gantt-label {
+  padding-left: 44px;
+  background: #fff;
+}
+
 .gantt-label span,
 .gantt-label small {
   color: var(--muted);
@@ -605,6 +649,10 @@ input[type="number"] {
   background: #eef3fa;
 }
 
+.item-row .gantt-week-cell:nth-child(even) {
+  background: #f7f9fc;
+}
+
 .gantt-bar {
   position: absolute;
   top: 50%;
@@ -631,6 +679,16 @@ input[type="number"] {
   color: #101827;
   font-size: 12px;
   font-weight: 800;
+}
+
+.gantt-today-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  background: var(--red);
+  pointer-events: none;
 }
 
 .gantt-missing {
@@ -712,6 +770,15 @@ input[type="number"] {
   margin-top: 12px;
 }
 
+.wide-field { grid-column: span 2; }
+
+.form-validation {
+  min-height: 20px;
+  margin: 8px 0 0;
+  color: var(--red);
+  font-weight: 700;
+}
+
 .check-group {
   display: flex;
   align-items: center;
@@ -733,6 +800,34 @@ input[type="number"] {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.manual-time-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.manual-time-row input { width: 92px; }
+
+.time-session-list {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  margin-top: 10px;
+}
+
+.time-session-list h3 { margin: 0 0 4px; font-size: 14px; }
+
+.time-session-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .button-row {
@@ -815,6 +910,74 @@ input[type="number"] {
   color: var(--muted);
 }
 
+.today-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.today-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.today-row.overdue { border-left-color: var(--red); }
+.today-row strong { display: block; margin-top: 4px; }
+.today-row p { margin: 4px 0 0; color: var(--muted); }
+.today-progress { color: var(--blue); font-size: 20px; font-weight: 800; }
+
+.mobile-nav { display: none; }
+
+.app-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #101827;
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+
+.app-toast button { border: 0; background: transparent; color: #9cc1ff; font-weight: 800; }
+
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(16, 24, 39, 0.45);
+}
+
+.confirm-dialog[hidden],
+.app-toast[hidden] {
+  display: none !important;
+}
+
+.dialog-card {
+  width: min(420px, 100%);
+  padding: 22px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(16, 24, 39, 0.2);
+}
+
+.dialog-card h2 { margin: 0; }
+.dialog-card p { color: var(--muted); line-height: 1.5; }
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -828,6 +991,9 @@ input[type="number"] {
   .attachment-grid {
     grid-template-columns: 1fr;
   }
+
+  .list-tools { grid-template-columns: 1fr 1fr; }
+  .wide-field { grid-column: auto; }
 
   .slider-row {
     grid-template-columns: auto minmax(0, 1fr) minmax(42px, auto);
@@ -867,4 +1033,25 @@ input[type="number"] {
     justify-self: stretch;
     justify-content: space-between;
   }
+
+  .workspace { padding: 70px 14px 82px; }
+  .form-panel, .panel { padding: 14px; }
+  .form-panel h2 { font-size: 24px; }
+
+  .mobile-nav {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 25;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 -6px 20px rgba(30, 42, 62, 0.08);
+  }
+
+  .mobile-nav button { min-height: 44px; border: 0; background: transparent; color: var(--muted); font-weight: 800; }
+  .mobile-nav button:active { color: var(--blue); }
+  .app-toast { right: 12px; bottom: 76px; left: 12px; justify-content: space-between; }
+  .panel-header .icon-button { position: fixed; right: 16px; bottom: 78px; z-index: 24; border-radius: 999px; box-shadow: var(--shadow); }
 }
